@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiftTracker Task Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root {
+  --primary: #1e3a5f; --primary-light: #2c5282; --accent: #3182ce; --accent-light: #63b3ed;
+  --success: #38a169; --warning: #d69e2e; --danger: #e53e3e;
+  --bg: #f7fafc; --card: #ffffff; --text: #2d3748; --text-light: #718096; --border: #e2e8f0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ---- Login Screen ---- */
+.login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 50%, #3182ce 100%); }
+.login-card { background: white; border-radius: 16px; padding: 48px 40px; width: 420px; max-width: 90vw; box-shadow: var(--shadow-lg); text-align: center; }
+.login-card h1 { font-size: 28px; color: var(--primary); margin-bottom: 4px; }
+.login-card .login-sub { font-size: 14px; color: var(--text-light); margin-bottom: 32px; }
+.login-card label { display: block; text-align: left; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.login-card select, .login-card input { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 16px; outline: none; }
+.login-card select:focus, .login-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(49,130,206,0.15); }
+.login-card .or-divider { display: flex; align-items: center; gap: 12px; margin: 8px 0 16px; color: var(--text-light); font-size: 12px; }
+.login-card .or-divider::before, .login-card .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.btn { display: inline-block; padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--primary-light); }
+.btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: #c53030; }
+.btn-success { background: var(--success); color: white; }
+.btn-success:hover { background: #2f855a; }
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+.btn-block { width: 100%; }
+
+/* ---- Top Nav ---- */
+.topnav { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%); color: white; padding: 0 24px; display: flex; align-items: center; height: 56px; gap: 24px; position: sticky; top: 0; z-index: 100; }
+.topnav .brand { font-size: 18px; font-weight: 700; white-space: nowrap; }
+.topnav .nav-links { display: flex; gap: 4px; flex: 1; }
+.topnav .nav-links button { padding: 8px 16px; border: none; background: transparent; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 14px; border-radius: 6px; transition: all 0.2s; white-space: nowrap; }
+.topnav .nav-links button.active, .topnav .nav-links button:hover { background: rgba(255,255,255,0.15); color: white; }
+.topnav .user-area { display: flex; align-items: center; gap: 12px; margin-left: auto; font-size: 13px; }
+.topnav .user-area .user-name { font-weight: 500; }
+.topnav .user-area button { padding: 6px 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.topnav .user-area button:hover { background: rgba(255,255,255,0.2); }
+
+/* ---- Page Container ---- */
+.page { max-width: 1440px; margin: 0 auto; padding: 24px; display: none; }
+.page.active { display: block; }
+
+/* ---- Saved Analyses List ---- */
+.analyses-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.analysis-card { background: var(--card); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); transition: box-shadow 0.2s; cursor: pointer; border-left: 4px solid var(--accent); }
+.analysis-card:hover { box-shadow: var(--shadow-lg); }
+.analysis-card h3 { font-size: 16px; color: var(--primary); margin-bottom: 6px; }
+.analysis-card .meta { font-size: 12px; color: var(--text-light); margin-bottom: 8px; }
+.analysis-card .stats { display: flex; gap: 16px; font-size: 13px; }
+.analysis-card .stats span { display: flex; align-items: center; gap: 4px; }
+.analysis-card .actions { display: flex; gap: 8px; margin-top: 12px; }
+.empty-state { text-align: center; padding: 60px 24px; color: var(--text-light); }
+.empty-state h3 { font-size: 20px; color: var(--primary); margin-bottom: 8px; }
+
+/* ---- Upload + Analysis ---- */
+.upload-area { margin-bottom: 24px; }
+.drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 48px; text-align: center; cursor: pointer; transition: all 0.3s; background: var(--card); }
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: #ebf8ff; }
+.drop-zone h2 { font-size: 20px; margin-bottom: 8px; color: var(--primary); }
+.drop-zone h3 { font-size: 16px; margin-bottom: 6px; color: var(--primary); }
+.drop-zone p { color: var(--text-light); font-size: 14px; }
+.drop-zone input { display: none; }
+.compare-uploads { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.file-list { margin-top: 16px; text-align: left; max-width: 700px; margin-left: auto; margin-right: auto; }
+.file-item { display: flex; align-items: center; justify-content: space-between; background: #ebf8ff; border-radius: 8px; padding: 8px 14px; margin-bottom: 6px; font-size: 13px; }
+.file-item .file-info { display: flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 500; flex-wrap: wrap; }
+.file-item .file-info .sheet-count { font-weight: 400; color: var(--text-light); font-size: 12px; }
+.file-item .file-info .task-count { font-weight: 600; color: var(--accent); font-size: 12px; }
+.file-item .file-info .type-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase; }
+.type-task { background: rgba(49,130,206,0.15); color: var(--accent); }
+.type-equip { background: rgba(214,158,46,0.15); color: #b7791f; }
+.file-item .remove-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; line-height: 1; }
+.file-item .remove-btn:hover { background: rgba(229,62,62,0.1); }
+.mode-toggle { display: flex; background: var(--bg); border-radius: 8px; overflow: hidden; margin-bottom: 20px; width: fit-content; border: 1px solid var(--border); }
+.mode-toggle button { padding: 8px 20px; border: none; background: transparent; color: var(--text-light); cursor: pointer; font-size: 14px; transition: all 0.2s; }
+.mode-toggle button.active { background: var(--primary); color: white; font-weight: 600; }
+
+/* ---- Dashboard ---- */
+.dashboard { margin-top: 20px; }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.kpi-card { background: var(--card); border-radius: 10px; padding: 20px; box-shadow: var(--shadow); text-align: center; position: relative; overflow: hidden; }
+.kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-light)); }
+.kpi-card.kpi-highlight::before { background: linear-gradient(90deg, var(--success), #68d391); }
+.kpi-card.kpi-warn::before { background: linear-gradient(90deg, var(--warning), #f6e05e); }
+.kpi-card.kpi-danger::before { background: linear-gradient(90deg, var(--danger), #fc8181); }
+.kpi-card .value { font-size: 30px; font-weight: 700; color: var(--primary); }
+.kpi-card .label { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+.kpi-card .change { font-size: 11px; margin-top: 6px; font-weight: 600; }
+.kpi-card .change.up { color: var(--success); }
+.kpi-card .change.down { color: var(--danger); }
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(540px, 1fr)); gap: 20px; margin-bottom: 24px; }
+.chart-card { background: var(--card); border-radius: 10px; padding: 20px; box-shadow: var(--shadow); }
+.chart-card h3 { font-size: 15px; font-weight: 600; color: var(--primary); margin-bottom: 14px; }
+.chart-card canvas { width: 100% !important; max-height: 340px; }
+.full-width { grid-column: 1 / -1; }
+.section-title { font-size: 18px; font-weight: 700; color: var(--primary); margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); }
+.section-title.equip-title { border-bottom-color: var(--warning); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--primary); color: white; padding: 10px 12px; text-align: left; font-weight: 600; }
+td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+tr:hover { background: #f0f7ff; }
+.bar-fill { height: 6px; border-radius: 3px; background: var(--accent); }
+.hidden { display: none; }
+
+/* Heatmap */
+.heatmap-wrap { overflow-x: auto; }
+.heatmap-table { border-collapse: collapse; font-size: 12px; width: 100%; min-width: 500px; }
+.heatmap-table th { background: var(--primary); color: white; padding: 8px 6px; text-align: center; font-weight: 600; font-size: 11px; position: sticky; top: 0; z-index: 1; }
+.heatmap-table th:first-child { text-align: left; min-width: 140px; }
+.heatmap-table td { padding: 6px; text-align: center; font-size: 11px; font-weight: 500; border: 1px solid rgba(255,255,255,0.6); transition: transform 0.15s; position: relative; }
+.heatmap-table td:first-child { text-align: left; font-weight: 600; color: var(--primary); background: white !important; border-right: 2px solid var(--border); font-size: 12px; }
+.heatmap-table td:hover { transform: scale(1.05); z-index: 2; box-shadow: 0 0 8px rgba(0,0,0,0.15); }
+.heatmap-table tr:last-child td { border-bottom: 2px solid var(--primary); font-weight: 700; }
+.heatmap-legend { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; color: var(--text-light); }
+.heatmap-legend .legend-bar { width: 120px; height: 10px; border-radius: 5px; }
+
+/* Horizontal bars */
+.h-bar-container { display: flex; flex-direction: column; gap: 8px; }
+.h-bar-row { display: flex; align-items: center; gap: 10px; }
+.h-bar-label { width: 130px; font-size: 12px; font-weight: 500; color: var(--primary); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.h-bar-track { flex: 1; height: 22px; background: var(--bg); border-radius: 11px; overflow: hidden; position: relative; }
+.h-bar-fill { height: 100%; border-radius: 11px; transition: width 0.5s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; }
+.h-bar-value { font-size: 11px; font-weight: 700; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+.h-bar-pct { width: 45px; font-size: 11px; color: var(--text-light); text-align: left; flex-shrink: 0; }
+
+/* Spark KPI cards */
+.spark-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.spark-card { background: var(--card); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 12px; }
+.spark-card .spark-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.spark-card .spark-data { flex: 1; }
+.spark-card .spark-val { font-size: 22px; font-weight: 700; color: var(--primary); }
+.spark-card .spark-label { font-size: 11px; color: var(--text-light); }
+.source-summary { background: var(--card); border-radius: 10px; padding: 16px 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+.source-summary h3 { font-size: 14px; color: var(--primary); margin-bottom: 10px; }
+.source-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.source-chip { background: #ebf8ff; color: var(--primary); padding: 4px 12px; border-radius: 16px; font-size: 12px; font-weight: 500; }
+.year-tabs { display: flex; gap: 0; margin-bottom: 24px; background: var(--card); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); flex-wrap: wrap; }
+.year-tabs button { padding: 12px 24px; border: none; background: transparent; font-size: 14px; cursor: pointer; color: var(--text-light); transition: all 0.2s; white-space: nowrap; }
+.year-tabs button.active { background: var(--primary); color: white; font-weight: 600; }
+.year-tabs button:hover:not(.active) { background: #ebf8ff; color: var(--primary); }
+.compare-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.compare-label { text-align: center; font-weight: 600; font-size: 14px; color: var(--primary); padding: 8px; background: #ebf8ff; border-radius: 8px; margin-bottom: 12px; }
+.yoy-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.yoy-table th { background: var(--primary); color: white; padding: 10px 14px; text-align: center; font-weight: 600; }
+.yoy-table th:first-child { text-align: left; }
+.yoy-table td { padding: 8px 14px; border-bottom: 1px solid var(--border); text-align: center; }
+.yoy-table td:first-child { text-align: left; font-weight: 600; color: var(--primary); }
+.yoy-table tr:hover { background: #f0f7ff; }
+.yoy-change { font-size: 11px; font-weight: 600; }
+.yoy-up { color: var(--success); }
+.yoy-down { color: var(--danger); }
+
+/* ---- Modal ---- */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: white; border-radius: 16px; padding: 32px; width: 480px; max-width: 90vw; box-shadow: var(--shadow-lg); }
+.modal h2 { font-size: 20px; color: var(--primary); margin-bottom: 20px; }
+.modal label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.modal input, .modal textarea { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin-bottom: 16px; outline: none; font-family: inherit; }
+.modal input:focus, .modal textarea:focus { border-color: var(--accent); }
+.modal textarea { min-height: 60px; resize: vertical; }
+.modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ---- Toolbar ---- */
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; padding: 12px 16px; background: var(--card); border-radius: 10px; box-shadow: var(--shadow); }
+.toolbar .toolbar-title { font-size: 16px; font-weight: 700; color: var(--primary); margin-right: auto; }
+
+/* ---- Toast ---- */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--primary); color: white; padding: 12px 24px; border-radius: 10px; font-size: 14px; box-shadow: var(--shadow-lg); z-index: 2000; opacity: 0; transform: translateY(20px); transition: all 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+@media (max-width: 768px) {
+  .chart-grid { grid-template-columns: 1fr; }
+  .compare-uploads, .compare-row { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .topnav { padding: 0 12px; gap: 8px; }
+  .analyses-grid { grid-template-columns: 1fr; }
+}
+@media print {
+  .topnav, .upload-area, .year-tabs, .toolbar, .mode-toggle { display: none; }
+  .chart-card { break-inside: avoid; page-break-inside: avoid; }
+  .page { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<!-- ====== LOGIN SCREEN ====== -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <h1>LiftTracker</h1>
+    <p class="login-sub">Task Analyzer &mdash; Team Edition</p>
+    <label>Select your name</label>
+    <select id="loginSelect"><option value="">Loading team members...</option></select>
+    <div class="or-divider">or join as a new member</div>
+    <label>Your name</label>
+    <input id="loginName" type="text" placeholder="e.g. Jane Smith">
+    <label>Email (optional)</label>
+    <input id="loginEmail" type="email" placeholder="e.g. jane@atlasmobility.com">
+    <button class="btn btn-primary btn-block" onclick="doLogin()" style="margin-top:8px">Sign In</button>
+  </div>
+</div>
+
+<!-- ====== MAIN APP ====== -->
+<div id="mainApp" style="display:none">
+  <nav class="topnav">
+    <div class="brand">LiftTracker</div>
+    <div class="nav-links">
+      <button class="active" onclick="showPage('new')" data-page="new">New Analysis</button>
+      <button onclick="showPage('saved')" data-page="saved">Saved Analyses</button>
+    </div>
+    <div class="user-area">
+      <span class="user-name" id="navUserName"></span>
+      <button onclick="doLogout()">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- ==== New Analysis Page ==== -->
+  <div class="page active" id="pageNew">
+    <div class="mode-toggle">
+      <button class="active" onclick="setMode('single')">Combined Analysis</button>
+      <button onclick="setMode('compare')">Compare Two Groups</button>
+    </div>
+    <div class="upload-area" id="uploadArea">
+      <div id="singleUpload">
+        <div class="drop-zone" id="dropZone1" onclick="document.getElementById('fileInput1').click()" ondragover="handleDragOver(event,this)" ondragleave="handleDragLeave(this)" ondrop="handleDropMulti(event,this,'main')">
+          <input type="file" id="fileInput1" accept=".xlsx,.xls,.csv" multiple onchange="handleFilesMulti(this.files,'main')">
+          <h2>Drop LiftTracker Exports Here</h2>
+          <p>Drag one or more files (.xlsx, .xls, .csv). Task sheets and Equipment Check sheets are auto-detected.</p>
+        </div>
+        <div class="file-list" id="fileListMain"></div>
+        <div style="text-align:center;">
+          <button class="btn btn-primary hidden" id="analyzeBtnMain" onclick="runSingleAnalysis()" style="margin-top:16px">Analyze All Files</button>
+        </div>
+      </div>
+      <div id="compareUpload" class="compare-uploads hidden">
+        <div>
+          <div class="drop-zone" id="dropZoneA" onclick="document.getElementById('fileInputA').click()" ondragover="handleDragOver(event,this)" ondragleave="handleDragLeave(this)" ondrop="handleDropMulti(event,this,'A')">
+            <input type="file" id="fileInputA" accept=".xlsx,.xls,.csv" multiple onchange="handleFilesMulti(this.files,'A')">
+            <h3>Group A (Baseline)</h3><p>Drop one or more exports</p>
+          </div>
+          <div class="file-list" id="fileListA"></div>
+        </div>
+        <div>
+          <div class="drop-zone" id="dropZoneB" onclick="document.getElementById('fileInputB').click()" ondragover="handleDragOver(event,this)" ondragleave="handleDragLeave(this)" ondrop="handleDropMulti(event,this,'B')">
+            <input type="file" id="fileInputB" accept=".xlsx,.xls,.csv" multiple onchange="handleFilesMulti(this.files,'B')">
+            <h3>Group B (Comparison)</h3><p>Drop one or more exports</p>
+          </div>
+          <div class="file-list" id="fileListB"></div>
+        </div>
+      </div>
+      <div style="text-align:center;">
+        <button class="btn btn-primary hidden" id="analyzeBtnCompare" onclick="runCompareAnalysis()" style="margin-top:16px">Compare Groups</button>
+      </div>
+    </div>
+
+    <!-- Toolbar (shown after analysis) -->
+    <div class="toolbar hidden" id="analysisToolbar">
+      <span class="toolbar-title" id="toolbarTitle">Analysis Results</span>
+      <button class="btn btn-sm btn-success" onclick="showSaveModal()">Save</button>
+      <button class="btn btn-sm btn-secondary" onclick="exportPDF()">Export PDF</button>
+      <button class="btn btn-sm btn-secondary" onclick="exportExcelClient()">Export Excel</button>
+      <button class="btn btn-sm btn-secondary" onclick="showShareModal()">Share</button>
+      <button class="btn btn-sm btn-secondary" onclick="window.print()">Print</button>
+      <button class="btn btn-sm btn-danger" onclick="resetAnalysis()">New Analysis</button>
+    </div>
+
+    <div class="dashboard hidden" id="dashboard"></div>
+  </div>
+
+  <!-- ==== Saved Analyses Page ==== -->
+  <div class="page" id="pageSaved">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="font-size:22px;color:var(--primary)">Saved Analyses</h2>
+      <button class="btn btn-sm btn-secondary" onclick="loadSavedAnalyses()">Refresh</button>
+    </div>
+    <div id="savedList"></div>
+  </div>
+</div>
+
+<!-- ====== MODALS ====== -->
+<div class="modal-overlay" id="saveModal">
+  <div class="modal">
+    <h2>Save Analysis</h2>
+    <label>Title</label>
+    <input id="saveTitle" type="text" placeholder="e.g. Q1 2024 Henry Ford Analysis">
+    <label>Description (optional)</label>
+    <textarea id="saveDesc" placeholder="Notes about this analysis..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('saveModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="doSaveAnalysis()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="shareModal">
+  <div class="modal">
+    <h2>Share Analysis</h2>
+    <label>Share Link</label>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input id="shareLink" type="text" readonly style="margin-bottom:0;flex:1" placeholder="Save analysis first to generate link">
+      <button class="btn btn-sm btn-primary" onclick="copyShareLink()">Copy</button>
+    </div>
+    <label>Send to email (optional)</label>
+    <input id="shareEmail" type="email" placeholder="colleague@atlasmobility.com">
+    <label>Message (optional)</label>
+    <textarea id="shareMessage" placeholder="Check out this analysis..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('shareModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="doShare()" id="shareBtn">Send</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// =============================================
+// STATE
+// =============================================
+let currentUser = null;
+let currentAnalysisId = null;
+let currentShareToken = null;
+let mode = 'single';
+let fileStore = { main: [], A: [], B: [] };
+let charts = [];
+let currentTab = 'overview';
+let cachedMerged = null;
+
+const COLORS = ['#3182ce','#38a169','#d69e2e','#e53e3e','#805ad5','#dd6b20','#319795','#d53f8c','#2b6cb0','#276749'];
+const COLORS_LIGHT = ['rgba(49,130,206,0.15)','rgba(56,161,105,0.15)','rgba(214,158,46,0.15)','rgba(229,62,62,0.15)','rgba(128,90,213,0.15)'];
+
+// =============================================
+// COLUMN MAPPINGS
+// =============================================
+const COL_MAP = {
+  status: ['status','task status','taskstatus','state'],
+  taskType: ['task type','tasktype','intervention','task','type','interventions'],
+  unit: ['unit','location','department','floor','ward','unit name','nursing unit'],
+  tech: ['assigned to','assignedto','technician','tech','staff','user','completed by','completedby','username'],
+  created: ['created','created date','createddate','date created','date','start','start date','startdate','task date','timestamp'],
+  completed: ['completed','completed date','completeddate','date completed','end','end date','enddate','finish date'],
+  equipment: ['equipment','equipment used','equipmentused','device','devices','lift equipment'],
+};
+const EQUIP_COL_MAP = {
+  date: ['date of equipment check','date','check date','equipment check date'],
+  checkedBy: ['checked by','checker','inspector','staff','technician','name'],
+  department: ['department','dept'],
+  unit: ['unit','location','ward','floor'],
+  hasIssue: ['equipment issues?','equipment issues','issues?','issues','has issue','has issues'],
+  issueDetails: ['issue details','details','issue detail','notes','comments','description'],
+};
+const ALL_HEADER_KEYWORDS = [
+  'status','task status','task type','intervention','unit','location','department',
+  'assigned to','technician','created','date','start date','completed','equipment',
+  'date of equipment check','checked by','equipment issues','issue details',
+  'checker','staff','issues'
+];
+
+// =============================================
+// PARSING FUNCTIONS
+// =============================================
+function findCol(headers, mapping) {
+  const lower = headers.map(h => (h||'').toString().toLowerCase().trim());
+  for (const c of mapping) { const idx = lower.indexOf(c); if (idx !== -1) return headers[idx]; }
+  for (const c of mapping) { const idx = lower.findIndex(h => h.includes(c) || c.includes(h)); if (idx !== -1) return headers[idx]; }
+  return null;
+}
+function isEquipCheckSheet(headers) {
+  const lower = headers.map(h => (h||'').toString().toLowerCase().trim());
+  const hasIssueCol = lower.some(h => h.includes('equipment issues') || h.includes('equipment check'));
+  const hasCheckedBy = lower.some(h => h.includes('checked by') || h.includes('checker'));
+  return hasIssueCol || (hasCheckedBy && !lower.some(h => h.includes('task type') || h.includes('intervention')));
+}
+function parseDate(val) {
+  if (!val) return null;
+  let d = typeof val === 'number' ? new Date((val - 25569) * 86400000) : new Date(val);
+  return isNaN(d) ? null : d;
+}
+function parseTaskRows(rows) {
+  if (!rows || rows.length === 0) return [];
+  const headers = Object.keys(rows[0]);
+  const cols = {};
+  for (const key of Object.keys(COL_MAP)) cols[key] = findCol(headers, COL_MAP[key]);
+  return rows.map(r => {
+    let dateObj = parseDate(r[cols.created]);
+    let completedDate = cols.completed ? parseDate(r[cols.completed]) : null;
+    let duration = null;
+    if (dateObj && completedDate) { duration = (completedDate - dateObj) / 60000; if (duration < 0 || duration > 1440) duration = null; }
+    return {
+      status: (r[cols.status]||'').toString().trim(),
+      taskType: (r[cols.taskType]||'').toString().trim(),
+      unit: (r[cols.unit]||'').toString().trim(),
+      tech: (r[cols.tech]||'').toString().trim(),
+      equipment: (r[cols.equipment]||'').toString().trim(),
+      date: dateObj, hour: dateObj ? dateObj.getHours() : null,
+      dayOfWeek: dateObj ? dateObj.getDay() : null,
+      month: dateObj ? dateObj.getFullYear()+'-'+String(dateObj.getMonth()+1).padStart(2,'0') : null,
+      year: dateObj ? dateObj.getFullYear() : null,
+      duration: duration
+    };
+  }).filter(t => t.date);
+}
+function parseEquipCheckRows(rows) {
+  if (!rows || rows.length === 0) return [];
+  const headers = Object.keys(rows[0]);
+  const cols = {};
+  for (const key of Object.keys(EQUIP_COL_MAP)) cols[key] = findCol(headers, EQUIP_COL_MAP[key]);
+  return rows.map(r => {
+    let dateObj = parseDate(r[cols.date]);
+    const issueRaw = (r[cols.hasIssue]||'').toString().trim().toLowerCase();
+    const hasIssue = issueRaw === 'yes' || issueRaw === 'true' || issueRaw === '1';
+    return {
+      date: dateObj,
+      month: dateObj ? dateObj.getFullYear()+'-'+String(dateObj.getMonth()+1).padStart(2,'0') : null,
+      year: dateObj ? dateObj.getFullYear() : null,
+      checkedBy: (r[cols.checkedBy]||'').toString().trim(),
+      department: (r[cols.department]||'').toString().trim(),
+      unit: (r[cols.unit]||'').toString().trim(),
+      hasIssue: hasIssue,
+      issueDetails: hasIssue ? (r[cols.issueDetails]||'').toString().trim() : '',
+    };
+  }).filter(e => e.date);
+}
+function findHeaderRow(sheet) {
+  const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+  const maxScan = Math.min(range.e.r, 30);
+  let bestRow = 0, bestScore = 0;
+  for (let r = range.s.r; r <= maxScan; r++) {
+    let score = 0;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({r:r, c:c})];
+      if (!cell || !cell.v) continue;
+      const val = String(cell.v).toLowerCase().trim();
+      if (val.length < 2 || val.length > 60) continue;
+      for (const kw of ALL_HEADER_KEYWORDS) {
+        if (val === kw || val.includes(kw) || kw.includes(val)) { score++; break; }
+      }
+    }
+    if (score > bestScore) { bestScore = score; bestRow = r; }
+  }
+  return { headerRow: bestRow, score: bestScore };
+}
+function sheetToRows(sheet) {
+  let rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+  if (rows.length > 0) {
+    const headers = Object.keys(rows[0]);
+    const lower = headers.map(h => (h||'').toString().toLowerCase().trim());
+    let headerScore = 0;
+    for (const h of lower) {
+      for (const kw of ALL_HEADER_KEYWORDS) {
+        if (h === kw || h.includes(kw) || kw.includes(h)) { headerScore++; break; }
+      }
+    }
+    if (headerScore >= 2) return rows;
+  }
+  const {headerRow, score} = findHeaderRow(sheet);
+  if (score >= 2) {
+    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+    const headers = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({r: headerRow, c: c})];
+      headers.push(cell && cell.v ? String(cell.v).trim() : '__col_'+c);
+    }
+    const dataRows = [];
+    for (let r = headerRow + 1; r <= range.e.r; r++) {
+      const row = {};
+      let hasData = false;
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = sheet[XLSX.utils.encode_cell({r: r, c: c})];
+        const key = headers[c - range.s.c] || '__col_'+c;
+        if (cell && cell.v !== undefined && cell.v !== null && cell.v !== '') { row[key] = cell.v; hasData = true; }
+        else { row[key] = ''; }
+      }
+      if (hasData) dataRows.push(row);
+    }
+    return dataRows;
+  }
+  return rows;
+}
+function parseWorkbook(arrayBuffer, fileName) {
+  const data = new Uint8Array(arrayBuffer);
+  const wb = XLSX.read(data, {type:'array', cellDates:true});
+  const entries = [];
+  wb.SheetNames.forEach(sheetName => {
+    const sheet = wb.Sheets[sheetName];
+    const rows = sheetToRows(sheet);
+    if (rows.length === 0) return;
+    const headers = Object.keys(rows[0]);
+    if (isEquipCheckSheet(headers)) {
+      const checks = parseEquipCheckRows(rows);
+      if (checks.length > 0) entries.push({ fileName, sheetName, type:'equipCheck', checks, taskCount: checks.length, dateRange: getDateRange(checks) });
+    } else {
+      const tasks = parseTaskRows(rows);
+      if (tasks.length > 0) entries.push({ fileName, sheetName, type:'task', tasks, taskCount: tasks.length, dateRange: getDateRange(tasks) });
+    }
+  });
+  return entries;
+}
+
+// =============================================
+// HELPERS
+// =============================================
+function getDateRange(items) {
+  const dates = items.map(t=>t.date).filter(Boolean).sort((a,b)=>a-b);
+  return { start: dates[0], end: dates[dates.length-1] };
+}
+function countBy(arr, key) {
+  const map = {};
+  arr.forEach(item => { const val = item[key] || 'Unknown'; map[val] = (map[val]||0) + 1; });
+  return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+}
+function groupByMonth(items) {
+  const map = {};
+  items.forEach(t => { if(t.month) map[t.month]=(map[t.month]||0)+1; });
+  return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+}
+function completionByMonth(tasks) {
+  const months = {};
+  tasks.forEach(t => {
+    if (!t.month) return;
+    if (!months[t.month]) months[t.month] = {total:0,completed:0};
+    months[t.month].total++;
+    const s = t.status.toLowerCase();
+    if (s.includes('complete')||s.includes('done')||s.includes('finished')) months[t.month].completed++;
+  });
+  return Object.entries(months).sort((a,b)=>a[0].localeCompare(b[0]));
+}
+function hourDistribution(tasks) {
+  const hours = new Array(24).fill(0);
+  tasks.forEach(t => { if(t.hour !== null) hours[t.hour]++; });
+  return hours;
+}
+function dayOfWeekDist(tasks) {
+  const days = new Array(7).fill(0);
+  const weekMap = {};
+  tasks.forEach(t => {
+    if (t.dayOfWeek === null || !t.date) return;
+    days[t.dayOfWeek]++;
+    const weekKey = t.year+'-W'+Math.ceil((t.date.getDate())/7);
+    if (!weekMap[weekKey]) weekMap[weekKey] = new Array(7).fill(0);
+    weekMap[weekKey][t.dayOfWeek]++;
+  });
+  const numWeeks = Object.keys(weekMap).length || 1;
+  return days.map(d => Math.round(d / numWeeks * 10)/10);
+}
+function topN(entries, n=10) { return entries.slice(0, n); }
+function formatDate(d) { return d ? d.toLocaleDateString('en-US',{month:'short',year:'numeric'}) : ''; }
+function getCompletionRate(tasks) {
+  const c = tasks.filter(x=>{const s=x.status.toLowerCase();return s.includes('complete')||s.includes('done')||s.includes('finished');});
+  return tasks.length ? Math.round(c.length/tasks.length*100) : 0;
+}
+function getMedianDuration(tasks) {
+  const d = tasks.map(x=>x.duration).filter(Boolean).sort((a,b)=>a-b);
+  return d.length ? d[Math.floor(d.length/2)] : 0;
+}
+function getYears(tasks, checks) {
+  const years = new Set();
+  tasks.forEach(t => { if(t.year) years.add(t.year); });
+  if (checks) checks.forEach(c => { if(c.year) years.add(c.year); });
+  return [...years].sort();
+}
+function destroyCharts() { charts.forEach(c => c.destroy()); charts = []; }
+function makeChart(ctx, config) { const c = new Chart(ctx, config); charts.push(c); return c; }
+
+// Equipment check helpers
+function equipIssuesByMonth(checks) {
+  const months = {};
+  checks.forEach(c => {
+    if (!c.month) return;
+    if (!months[c.month]) months[c.month] = {total:0, issues:0};
+    months[c.month].total++;
+    if (c.hasIssue) months[c.month].issues++;
+  });
+  return Object.entries(months).sort((a,b)=>a[0].localeCompare(b[0]));
+}
+function categorizeIssues(checks) {
+  const cats = {'Sling Shortage':0,'Battery Issue':0,'Equipment Malfunction':0,'Missing Equipment':0,'Supply Shortage':0,'Other':0};
+  const issueChecks = checks.filter(c=>c.hasIssue && c.issueDetails);
+  issueChecks.forEach(c => {
+    const d = c.issueDetails.toLowerCase();
+    if (d.includes('sling')) cats['Sling Shortage']++;
+    else if (d.includes('battery')||d.includes('charg')) cats['Battery Issue']++;
+    else if (d.includes('broken')||d.includes('malfunction')||d.includes('not working')||d.includes('beep')) cats['Equipment Malfunction']++;
+    else if (d.includes('missing')||d.includes('wrong unit')||d.includes('not in')) cats['Missing Equipment']++;
+    else if (d.includes('sheet')||d.includes('stock')||d.includes('supply')||d.includes('out of')) cats['Supply Shortage']++;
+    else cats['Other']++;
+  });
+  return Object.entries(cats).filter(([_,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+}
+
+// =============================================
+// LOGIN / AUTH
+// =============================================
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/users');
+    const users = await res.json();
+    const sel = document.getElementById('loginSelect');
+    sel.innerHTML = '<option value="">-- Select your name --</option>';
+    users.forEach(u => {
+      sel.innerHTML += `<option value="${u.id}" data-name="${u.name}" data-email="${u.email||''}">${u.name}${u.role==='admin'?' (Admin)':''}</option>`;
+    });
+  } catch(e) { console.error('Failed to load users:', e); }
+}
+
+async function doLogin() {
+  const sel = document.getElementById('loginSelect');
+  const nameInput = document.getElementById('loginName').value.trim();
+  const emailInput = document.getElementById('loginEmail').value.trim();
+
+  if (sel.value) {
+    const opt = sel.options[sel.selectedIndex];
+    currentUser = { id: sel.value, name: opt.dataset.name, email: opt.dataset.email };
+  } else if (nameInput) {
+    try {
+      const res = await fetch('/api/users', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name: nameInput, email: emailInput }) });
+      const user = await res.json();
+      currentUser = { id: user.id, name: nameInput, email: emailInput };
+    } catch(e) { showToast('Failed to create user'); return; }
+  } else {
+    showToast('Please select a name or enter a new one'); return;
+  }
+
+  localStorage.setItem('liftracker_user', JSON.stringify(currentUser));
+  enterApp();
+}
+
+function doLogout() {
+  currentUser = null;
+  localStorage.removeItem('liftracker_user');
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  resetAnalysis();
+}
+
+function enterApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('navUserName').textContent = currentUser.name;
+  loadSavedAnalyses();
+  // Check for shared report
+  const path = window.location.pathname;
+  if (path.startsWith('/shared/')) {
+    const token = path.split('/shared/')[1];
+    if (token) loadSharedAnalysis(token);
+  }
+}
+
+// =============================================
+// NAVIGATION
+// =============================================
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-links button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
+  document.querySelector(`.nav-links button[data-page="${page}"]`).classList.add('active');
+  if (page === 'saved') loadSavedAnalyses();
+}
+
+// =============================================
+// SAVED ANALYSES
+// =============================================
+async function loadSavedAnalyses() {
+  try {
+    const res = await fetch('/api/analyses');
+    const analyses = await res.json();
+    const container = document.getElementById('savedList');
+    if (analyses.length === 0) {
+      container.innerHTML = '<div class="empty-state"><h3>No saved analyses yet</h3><p>Run a new analysis and save it to see it here.</p></div>';
+      return;
+    }
+    container.innerHTML = '<div class="analyses-grid">' + analyses.map(a => `
+      <div class="analysis-card" onclick="loadAnalysis('${a.id}')">
+        <h3>${escHtml(a.title)}</h3>
+        <div class="meta">By ${escHtml(a.user_name)} &middot; ${new Date(a.created_at).toLocaleDateString()}</div>
+        <div class="stats">
+          <span>${(a.task_count||0).toLocaleString()} tasks</span>
+          <span>${(a.check_count||0).toLocaleString()} checks</span>
+          ${a.date_range_start ? `<span>${a.date_range_start} to ${a.date_range_end}</span>` : ''}
+        </div>
+        <div class="actions" onclick="event.stopPropagation()">
+          <button class="btn btn-sm btn-secondary" onclick="exportExcelServer('${a.id}','${escHtml(a.title)}')">Excel</button>
+          <button class="btn btn-sm btn-secondary" onclick="copyShareLinkFor('${a.share_token}')">Copy Link</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteAnalysis('${a.id}')">Delete</button>
+        </div>
+      </div>`).join('') + '</div>';
+  } catch(e) { console.error('Failed to load analyses', e); }
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+async function loadAnalysis(id) {
+  try {
+    const res = await fetch('/api/analyses/' + id);
+    const analysis = await res.json();
+    currentAnalysisId = analysis.id;
+    currentShareToken = analysis.share_token;
+
+    // Parse raw_json from files back into tasks/checks
+    const tasks = [], checks = [], fileNames = [];
+    (analysis.files || []).forEach(f => {
+      try {
+        const data = JSON.parse(f.raw_json);
+        fileNames.push(f.file_name);
+        if (f.data_type === 'equipCheck') {
+          checks.push(...parseEquipCheckRows(data));
+        } else {
+          tasks.push(...parseTaskRows(data));
+        }
+      } catch(e) {}
+    });
+
+    const allDates = [...tasks.map(t=>t.date),...checks.map(c=>c.date)].filter(Boolean).sort((a,b)=>a-b);
+    cachedMerged = { tasks, checks, fileNames: [...new Set(fileNames)], dateRange: { start: allDates[0], end: allDates[allDates.length-1] } };
+    currentTab = 'overview';
+
+    showPage('new');
+    document.getElementById('uploadArea').classList.add('hidden');
+    document.getElementById('analysisToolbar').classList.remove('hidden');
+    document.getElementById('toolbarTitle').textContent = analysis.title;
+    document.getElementById('dashboard').classList.remove('hidden');
+    renderTabbedDashboard(cachedMerged);
+    showToast('Loaded: ' + analysis.title);
+  } catch(e) { showToast('Failed to load analysis'); console.error(e); }
+}
+
+async function loadSharedAnalysis(token) {
+  try {
+    const res = await fetch('/api/analyses/' + token);
+    const analysis = await res.json();
+    currentAnalysisId = analysis.id;
+    currentShareToken = analysis.share_token;
+
+    const tasks = [], checks = [], fileNames = [];
+    (analysis.files || []).forEach(f => {
+      try {
+        const data = JSON.parse(f.raw_json);
+        fileNames.push(f.file_name);
+        if (f.data_type === 'equipCheck') checks.push(...parseEquipCheckRows(data));
+        else tasks.push(...parseTaskRows(data));
+      } catch(e) {}
+    });
+
+    const allDates = [...tasks.map(t=>t.date),...checks.map(c=>c.date)].filter(Boolean).sort((a,b)=>a-b);
+    cachedMerged = { tasks, checks, fileNames: [...new Set(fileNames)], dateRange: { start: allDates[0], end: allDates[allDates.length-1] } };
+    currentTab = 'overview';
+
+    showPage('new');
+    document.getElementById('uploadArea').classList.add('hidden');
+    document.getElementById('analysisToolbar').classList.remove('hidden');
+    document.getElementById('toolbarTitle').textContent = analysis.title + ' (Shared)';
+    document.getElementById('dashboard').classList.remove('hidden');
+    renderTabbedDashboard(cachedMerged);
+  } catch(e) { console.error('Failed to load shared analysis', e); }
+}
+
+async function deleteAnalysis(id) {
+  if (!confirm('Delete this analysis? This cannot be undone.')) return;
+  try {
+    await fetch('/api/analyses/' + id, { method: 'DELETE' });
+    showToast('Analysis deleted');
+    loadSavedAnalyses();
+  } catch(e) { showToast('Delete failed'); }
+}
+
+// =============================================
+// FILE HANDLING
+// =============================================
+function handleDragOver(e, el) { e.preventDefault(); el.classList.add('drag-over'); }
+function handleDragLeave(el) { el.classList.remove('drag-over'); }
+function handleDropMulti(e, el, groupKey) {
+  e.preventDefault(); el.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) handleFilesMulti(e.dataTransfer.files, groupKey);
+}
+function handleFilesMulti(fileList, groupKey) {
+  Array.from(fileList).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const entries = parseWorkbook(e.target.result, file.name);
+      if (entries.length === 0) { showToast('No parseable data in "'+file.name+'"'); return; }
+      fileStore[groupKey].push(...entries);
+      renderFileList(groupKey);
+      updateAnalyzeButtons();
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+function removeFileEntry(groupKey, index) {
+  fileStore[groupKey].splice(index, 1);
+  renderFileList(groupKey);
+  updateAnalyzeButtons();
+}
+function renderFileList(groupKey) {
+  const container = document.getElementById('fileList'+(groupKey==='main'?'Main':groupKey));
+  if (!container) return;
+  if (fileStore[groupKey].length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = fileStore[groupKey].map((entry,i) => {
+    const typeBadge = entry.type === 'equipCheck'
+      ? '<span class="type-badge type-equip">Equipment Check</span>'
+      : '<span class="type-badge type-task">Tasks</span>';
+    return `<div class="file-item"><div class="file-info"><span>${escHtml(entry.fileName)}</span><span class="sheet-count">${escHtml(entry.sheetName)}</span>${typeBadge}<span class="task-count">${entry.taskCount.toLocaleString()} rows</span></div><button class="remove-btn" onclick="removeFileEntry('${groupKey}',${i})" title="Remove">&times;</button></div>`;
+  }).join('');
+}
+function updateAnalyzeButtons() {
+  document.getElementById('analyzeBtnMain').classList.toggle('hidden', mode!=='single'||fileStore.main.length===0);
+  document.getElementById('analyzeBtnCompare').classList.toggle('hidden', mode!=='compare'||fileStore.A.length===0||fileStore.B.length===0);
+}
+function mergeEntries(entries) {
+  const tasks = [], checks = [];
+  entries.forEach(e => {
+    if (e.type === 'task') tasks.push(...e.tasks);
+    else if (e.type === 'equipCheck') checks.push(...(e.checks||[]));
+  });
+  const allDates = [...tasks.map(t=>t.date),...checks.map(c=>c.date)].filter(Boolean).sort((a,b)=>a-b);
+  return { tasks, checks, fileNames: [...new Set(entries.map(e=>e.fileName))], dateRange: { start: allDates[0], end: allDates[allDates.length-1] } };
+}
+
+// =============================================
+// UI MODES
+// =============================================
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-toggle button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.mode-toggle button')[m==='single'?0:1].classList.add('active');
+  document.getElementById('singleUpload').classList.toggle('hidden', m!=='single');
+  document.getElementById('compareUpload').classList.toggle('hidden', m!=='compare');
+  updateAnalyzeButtons();
+}
+function resetAnalysis() {
+  destroyCharts();
+  fileStore = { main: [], A: [], B: [] };
+  currentTab = 'overview'; cachedMerged = null;
+  currentAnalysisId = null; currentShareToken = null;
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('dashboard').innerHTML = '';
+  document.getElementById('uploadArea').classList.remove('hidden');
+  document.getElementById('analysisToolbar').classList.add('hidden');
+  ['fileListMain','fileListA','fileListB'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML=''; });
+  updateAnalyzeButtons();
+}
+
+// =============================================
+// ANALYSIS ENTRY
+// =============================================
+function runSingleAnalysis() {
+  cachedMerged = mergeEntries(fileStore.main);
+  if (!cachedMerged || (cachedMerged.tasks.length===0 && cachedMerged.checks.length===0)) return;
+  currentTab = 'overview';
+  currentAnalysisId = null; currentShareToken = null;
+  document.getElementById('uploadArea').classList.add('hidden');
+  document.getElementById('analysisToolbar').classList.remove('hidden');
+  document.getElementById('toolbarTitle').textContent = 'Analysis Results';
+  document.getElementById('dashboard').classList.remove('hidden');
+  renderTabbedDashboard(cachedMerged);
+}
+function runCompareAnalysis() {
+  const a = mergeEntries(fileStore.A), b = mergeEntries(fileStore.B);
+  if (!a||!b) return;
+  document.getElementById('uploadArea').classList.add('hidden');
+  document.getElementById('analysisToolbar').classList.remove('hidden');
+  document.getElementById('toolbarTitle').textContent = 'Comparison Results';
+  document.getElementById('dashboard').classList.remove('hidden');
+  renderCompareDashboard(a, b);
+}
+
+// =============================================
+// TABBED DASHBOARD
+// =============================================
+function renderTabbedDashboard(data) {
+  destroyCharts();
+  const d = document.getElementById('dashboard');
+  const years = getYears(data.tasks, data.checks);
+  const sourceChips = data.fileNames.map(f=>`<span class="source-chip">${escHtml(f)}</span>`).join('');
+  const taskCount = data.tasks.length, checkCount = data.checks.length;
+  let html = `<div class="source-summary"><h3>Source Files (${data.fileNames.length}) &mdash; ${taskCount.toLocaleString()} tasks, ${checkCount.toLocaleString()} equipment checks</h3><div class="source-chips">${sourceChips}</div></div>`;
+  html += '<div class="year-tabs" id="yearTabs">';
+  html += `<button class="${currentTab==='overview'?'active':''}" onclick="switchTab('overview')">Overview (All Years)</button>`;
+  years.forEach(y => { html += `<button class="${currentTab===String(y)?'active':''}" onclick="switchTab('${y}')">${y}</button>`; });
+  html += '</div><div id="tabContent"></div>';
+  d.innerHTML = html;
+  d.classList.remove('hidden');
+  renderTabContent(data);
+}
+function switchTab(tab) {
+  currentTab = tab;
+  destroyCharts();
+  document.querySelectorAll('.year-tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.year-tabs button').forEach(b => {
+    if ((tab==='overview' && b.textContent.includes('Overview')) || b.textContent.trim()===tab) b.classList.add('active');
+  });
+  renderTabContent(cachedMerged);
+}
+function renderTabContent(data) {
+  const container = document.getElementById('tabContent');
+  if (currentTab === 'overview') {
+    renderOverviewTab(data, container);
+  } else {
+    const yr = parseInt(currentTab);
+    const yearTasks = data.tasks.filter(t => t.year === yr);
+    const yearChecks = data.checks.filter(c => c.year === yr);
+    const allDates = [...yearTasks.map(t=>t.date),...yearChecks.map(c=>c.date)].filter(Boolean).sort((a,b)=>a-b);
+    if (yearTasks.length===0 && yearChecks.length===0) { container.innerHTML = '<p style="padding:40px;text-align:center;color:var(--text-light);">No data for this year.</p>'; return; }
+    renderYearTab({ tasks: yearTasks, checks: yearChecks, dateRange: { start: allDates[0], end: allDates[allDates.length-1] } }, container, currentTab);
+  }
+}
+
+// =============================================
+// OVERVIEW TAB
+// =============================================
+function renderOverviewTab(data, container) {
+  const t = data.tasks, ec = data.checks;
+  const years = getYears(t, ec);
+  const completionRate = getCompletionRate(t);
+  const medianDur = Math.round(getMedianDuration(t));
+  const uniqueTechs = new Set(t.map(x=>x.tech).filter(Boolean)).size;
+  const months = groupByMonth(t);
+  const avgPerMonth = months.length ? Math.round(t.length/months.length) : t.length;
+  const issueRate = ec.length ? Math.round(ec.filter(c=>c.hasIssue).length/ec.length*100*10)/10 : 0;
+  const yoyData = years.map(y => {
+    const yt = t.filter(x=>x.year===y), yc = ec.filter(x=>x.year===y);
+    const ym = groupByMonth(yt);
+    return { year: y, tasks: yt.length, checks: yc.length, completion: getCompletionRate(yt), medDuration: Math.round(getMedianDuration(yt)), techs: new Set(yt.map(x=>x.tech).filter(Boolean)).size, avgPerMonth: ym.length ? Math.round(yt.length/ym.length) : yt.length, issueRate: yc.length ? Math.round(yc.filter(c=>c.hasIssue).length/yc.length*1000)/10 : 0, issues: yc.filter(c=>c.hasIssue).length, topUnit: countBy(yt,'unit')[0]?countBy(yt,'unit')[0][0]:'—' };
+  });
+  function yoyChange(arr, key, suffix='') {
+    return arr.map((d,i) => {
+      if (i===0) return '';
+      const prev = arr[i-1][key], cur = d[key], diff = cur - prev;
+      if (diff===0||!prev) return '';
+      const pct = Math.round(Math.abs(diff)/prev*100);
+      return ` <span class="yoy-change ${diff>0?'yoy-up':'yoy-down'}">${diff>0?'+':''}${diff}${suffix}</span>`;
+    });
+  }
+  const taskChanges = yoyChange(yoyData,'tasks');
+  const compChanges = yoyChange(yoyData,'completion','%');
+  let html = `
+    <h2 class="section-title">Combined Overview: ${formatDate(data.dateRange.start)} - ${formatDate(data.dateRange.end)}</h2>
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="value">${t.length.toLocaleString()}</div><div class="label">Total Tasks</div></div>
+      <div class="kpi-card"><div class="value">${completionRate}%</div><div class="label">Completion Rate</div></div>
+      <div class="kpi-card"><div class="value">${medianDur}</div><div class="label">Median Duration (min)</div></div>
+      <div class="kpi-card"><div class="value">${uniqueTechs}</div><div class="label">Active Technicians</div></div>
+      <div class="kpi-card"><div class="value">${avgPerMonth}</div><div class="label">Avg Tasks / Month</div></div>
+      <div class="kpi-card"><div class="value">${ec.length.toLocaleString()}</div><div class="label">Equipment Checks</div></div>
+      <div class="kpi-card"><div class="value">${issueRate}%</div><div class="label">Equipment Issue Rate</div></div>
+    </div>`;
+  html += `<div class="chart-card full-width" style="margin-bottom:24px;"><h3>Year-over-Year Summary</h3>
+    <table class="yoy-table"><tr><th>Metric</th>${yoyData.map(d=>`<th>${d.year}</th>`).join('')}</tr>
+    <tr><td>Total Tasks</td>${yoyData.map((d,i)=>`<td>${d.tasks.toLocaleString()}${taskChanges[i]}</td>`).join('')}</tr>
+    <tr><td>Completion Rate</td>${yoyData.map((d,i)=>`<td>${d.completion}%${compChanges[i]}</td>`).join('')}</tr>
+    <tr><td>Median Duration (min)</td>${yoyData.map(d=>`<td>${d.medDuration}</td>`).join('')}</tr>
+    <tr><td>Active Technicians</td>${yoyData.map(d=>`<td>${d.techs}</td>`).join('')}</tr>
+    <tr><td>Avg Tasks / Month</td>${yoyData.map(d=>`<td>${d.avgPerMonth}</td>`).join('')}</tr>
+    <tr><td>Equipment Checks</td>${yoyData.map(d=>`<td>${d.checks.toLocaleString()}</td>`).join('')}</tr>
+    <tr><td>Issues Found</td>${yoyData.map(d=>`<td>${d.issues}</td>`).join('')}</tr>
+    <tr><td>Issue Rate</td>${yoyData.map(d=>`<td>${d.issueRate}%</td>`).join('')}</tr>
+    <tr><td>Top Unit</td>${yoyData.map(d=>`<td style="font-size:12px">${escHtml(d.topUnit)}</td>`).join('')}</tr>
+    </table></div>`;
+  html += `<div class="chart-grid">
+    <div class="chart-card full-width"><h3>Monthly Task Volume &amp; Completion Rate</h3><canvas id="ovVolume"></canvas></div>
+    <div class="chart-card"><h3>Annual Task Volume</h3><canvas id="ovYearVol"></canvas></div>
+    <div class="chart-card"><h3>Annual Completion Rate</h3><canvas id="ovYearComp"></canvas></div>
+    <div class="chart-card full-width"><h3>Unit Activity Heatmap (Top Units x Months)</h3><div id="ovHeatmapUnits"></div></div>
+    <div class="chart-card"><h3>Top 10 Units</h3><canvas id="ovUnits"></canvas></div>
+    <div class="chart-card"><h3>Top 10 Interventions</h3><canvas id="ovInter"></canvas></div>
+    <div class="chart-card"><h3>Technician Workload (Top 10)</h3><canvas id="ovTechs"></canvas></div>
+    <div class="chart-card"><h3>Equipment Usage (Top 10)</h3><canvas id="ovEquip"></canvas></div>
+    <div class="chart-card full-width"><h3>Hourly Activity Distribution</h3><canvas id="ovHourly"></canvas></div>
+    <div class="chart-card"><h3>Average Tasks by Day of Week</h3><canvas id="ovDOW"></canvas></div>
+    <div class="chart-card"><h3>Task Status Breakdown</h3><canvas id="ovStatus"></canvas></div>
+  </div>`;
+  if (ec.length > 0) {
+    html += `<h2 class="section-title equip-title">Equipment Checks (All Years)</h2>
+    <div class="chart-grid">
+      <div class="chart-card full-width"><h3>Monthly Equipment Checks vs Issues</h3><canvas id="ovEqMonth"></canvas></div>
+      <div class="chart-card"><h3>Equipment Issue Categories</h3><canvas id="ovEqCats"></canvas></div>
+      <div class="chart-card"><h3>Top Equipment Checkers</h3><canvas id="ovEqCheckers"></canvas></div>
+      <div class="chart-card"><h3>Units with Most Issues</h3><canvas id="ovEqUnits"></canvas></div>
+      <div class="chart-card"><h3>Annual Issue Rate Trend</h3><canvas id="ovEqYearTrend"></canvas></div>
+    </div>`;
+  }
+  html += `<h2 class="section-title">Detailed Tables</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Unit Performance</h3><div id="ovTblUnits"></div></div>
+      <div class="chart-card"><h3>Technician Performance</h3><div id="ovTblTechs"></div></div>
+    </div>`;
+  container.innerHTML = html;
+  const cpm = completionByMonth(t);
+  makeChart(document.getElementById('ovVolume'), {type:'bar',data:{labels:cpm.map(m=>m[0]),datasets:[
+    {type:'bar',label:'Tasks',data:cpm.map(m=>m[1].total),backgroundColor:'rgba(49,130,206,0.7)',order:2},
+    {type:'line',label:'Completion %',data:cpm.map(m=>m[1].total?Math.round(m[1].completed/m[1].total*100):0),borderColor:'#38a169',backgroundColor:'rgba(56,161,105,0.1)',yAxisID:'y1',tension:0.3,order:1}
+  ]},options:{responsive:true,interaction:{mode:'index'},scales:{y:{beginAtZero:true,title:{display:true,text:'Tasks'}},y1:{position:'right',beginAtZero:true,max:100,title:{display:true,text:'%'},grid:{drawOnChartArea:false}}}}});
+  makeChart(document.getElementById('ovYearVol'), {type:'bar',data:{labels:yoyData.map(d=>String(d.year)),datasets:[{label:'Tasks',data:yoyData.map(d=>d.tasks),backgroundColor:COLORS}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  makeChart(document.getElementById('ovYearComp'), {type:'line',data:{labels:yoyData.map(d=>String(d.year)),datasets:[{label:'%',data:yoyData.map(d=>d.completion),borderColor:'#38a169',backgroundColor:'rgba(56,161,105,0.15)',fill:true,tension:0.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100}}}});
+  const ovHm = buildUnitMonthHeatmap(t);
+  renderHeatmapHTML(ovHm, 'blue', 'ovHeatmapUnits');
+  renderBarChart('ovUnits',t,'unit','Tasks');
+  renderBarChart('ovInter',t,'taskType','Count');
+  renderBarChart('ovTechs',t,'tech','Tasks');
+  const equip = topN(countBy(t.filter(x=>x.equipment),'equipment'));
+  if (equip.length) makeChart(document.getElementById('ovEquip'),{type:'bar',data:{labels:equip.map(e=>e[0].length>25?e[0].substring(0,25)+'...':e[0]),datasets:[{label:'Uses',data:equip.map(e=>e[1]),backgroundColor:COLORS}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  renderHourlyChart('ovHourly',t);
+  renderDOWChart('ovDOW',t);
+  renderStatusChart('ovStatus',t);
+  if (ec.length > 0) renderEquipCharts('ov', ec, yoyData);
+  renderTable(t,'ovTblUnits','unit',['Unit','Tasks','Completion %']);
+  renderTable(t,'ovTblTechs','tech',['Technician','Tasks','% of Total']);
+}
+
+// =============================================
+// HEATMAP HELPERS
+// =============================================
+function buildUnitMonthHeatmap(tasks) {
+  const unitMap = {};
+  tasks.forEach(t => { if (!t.unit || !t.month) return; if (!unitMap[t.unit]) unitMap[t.unit] = {}; unitMap[t.unit][t.month] = (unitMap[t.unit][t.month]||0) + 1; });
+  const allMonths = [...new Set(tasks.map(t=>t.month).filter(Boolean))].sort();
+  const units = Object.entries(unitMap).map(([u,m])=>[u, Object.values(m).reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,15).map(u=>u[0]);
+  let maxVal = 0;
+  units.forEach(u => allMonths.forEach(m => { const v = unitMap[u]?.[m]||0; if(v>maxVal) maxVal=v; }));
+  return { units, months: allMonths, data: unitMap, maxVal };
+}
+function heatColor(value, max, palette) {
+  if (!value || max === 0) return 'rgba(241,245,249,1)';
+  const intensity = Math.min(value / max, 1);
+  if (palette === 'blue') { return `rgb(${Math.round(235-intensity*186)},${Math.round(248-intensity*118)},${Math.round(255-intensity*49)})`; }
+  if (palette === 'red') { return `rgb(255,${Math.round(245-intensity*183)},${Math.round(245-intensity*183)})`; }
+  return `rgb(${Math.round(240-intensity*184)},${Math.round(255-intensity*94)},${Math.round(240-intensity*137)})`;
+}
+function renderHeatmapHTML(hm, palette, id) {
+  const monthLabels = hm.months.map(m => { const [y,mo] = m.split('-'); return ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)]; });
+  let html = '<div class="heatmap-wrap"><table class="heatmap-table"><tr><th>Unit</th>';
+  monthLabels.forEach(m => html += `<th>${m}</th>`);
+  html += '<th>Total</th></tr>';
+  hm.units.forEach(unit => {
+    html += `<tr><td>${escHtml(unit)}</td>`;
+    let total = 0;
+    hm.months.forEach(month => {
+      const val = hm.data[unit]?.[month] || 0; total += val;
+      const bg = heatColor(val, hm.maxVal, palette);
+      const textColor = val > hm.maxVal * 0.6 ? 'white' : (val > 0 ? 'var(--text)' : 'var(--text-light)');
+      html += `<td style="background:${bg};color:${textColor}">${val || ''}</td>`;
+    });
+    html += `<td style="background:${heatColor(total, hm.maxVal * hm.months.length * 0.15, palette)};font-weight:700">${total}</td></tr>`;
+  });
+  html += '</table>';
+  const gradFrom = palette==='blue'?'#ebf8ff':'#fff5f5', gradTo = palette==='blue'?'#2b6cb0':'#c53030';
+  html += `<div class="heatmap-legend"><span>Low</span><div class="legend-bar" style="background:linear-gradient(90deg,${gradFrom},${gradTo})"></div><span>High</span></div></div>`;
+  const el = document.getElementById(id); if (el) el.innerHTML = html;
+}
+function buildUnitHourHeatmap(tasks) {
+  const unitMap = {};
+  tasks.forEach(t => { if (!t.unit || t.hour === null) return; if (!unitMap[t.unit]) unitMap[t.unit] = {}; unitMap[t.unit][t.hour] = (unitMap[t.unit][t.hour]||0) + 1; });
+  const units = Object.entries(unitMap).map(([u,h])=>[u, Object.values(h).reduce((a,b)=>a+b,0)]).sort((a,b)=>b[1]-a[1]).slice(0,12).map(u=>u[0]);
+  let maxVal = 0;
+  units.forEach(u => { for(let h=0;h<24;h++) { const v = unitMap[u]?.[h]||0; if(v>maxVal)maxVal=v; }});
+  return { units, data: unitMap, maxVal };
+}
+function renderHourHeatmapHTML(hm, id) {
+  let html = '<div class="heatmap-wrap"><table class="heatmap-table"><tr><th>Unit</th>';
+  for (let h=6; h<22; h++) html += `<th>${h}:00</th>`;
+  html += '</tr>';
+  hm.units.forEach(unit => {
+    html += `<tr><td>${escHtml(unit)}</td>`;
+    for (let h=6; h<22; h++) {
+      const val = hm.data[unit]?.[h] || 0;
+      const bg = heatColor(val, hm.maxVal, 'blue');
+      const textColor = val > hm.maxVal * 0.6 ? 'white' : (val > 0 ? 'var(--text)' : 'var(--text-light)');
+      html += `<td style="background:${bg};color:${textColor}">${val || ''}</td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</table><div class="heatmap-legend"><span>Low</span><div class="legend-bar" style="background:linear-gradient(90deg,#ebf8ff,#2b6cb0)"></div><span>High</span></div></div>';
+  const el = document.getElementById(id); if (el) el.innerHTML = html;
+}
+function renderHorizontalBars(containerId, items, total, palette) {
+  const el = document.getElementById(containerId);
+  if (!el || !items.length) return;
+  const max = items[0][1];
+  const gradients = { blue:['#3182ce','#63b3ed'], green:['#38a169','#68d391'], orange:['#dd6b20','#f6ad55'], purple:['#805ad5','#b794f4'], red:['#e53e3e','#fc8181'], teal:['#319795','#4fd1c5'] };
+  const palettes = Object.values(gradients);
+  let html = '<div class="h-bar-container">';
+  items.forEach(([name, count], i) => {
+    const pct = Math.round(count/max*100);
+    const totalPct = total ? Math.round(count/total*100) : 0;
+    const grad = palette ? gradients[palette] : palettes[i % palettes.length];
+    html += `<div class="h-bar-row"><div class="h-bar-label" title="${escHtml(name)}">${escHtml(name)}</div><div class="h-bar-track"><div class="h-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,${grad[0]},${grad[1]})"><span class="h-bar-value">${count}</span></div></div><div class="h-bar-pct">${totalPct}%</div></div>`;
+  });
+  el.innerHTML = html + '</div>';
+}
+
+// =============================================
+// YEAR TAB
+// =============================================
+function renderYearTab(data, container, year) {
+  const t = data.tasks, ec = data.checks;
+  const completionRate = getCompletionRate(t);
+  const medianDur = Math.round(getMedianDuration(t));
+  const uniqueTechs = new Set(t.map(x=>x.tech).filter(Boolean)).size;
+  const months = groupByMonth(t);
+  const avgPerMonth = months.length ? Math.round(t.length/months.length) : t.length;
+  const issueRate = ec.length ? Math.round(ec.filter(c=>c.hasIssue).length/ec.length*1000)/10 : 0;
+  const cancelled = t.filter(x => x.status.toLowerCase().includes('cancel')).length;
+  const cancelRate = t.length ? Math.round(cancelled/t.length*100) : 0;
+  let html = `<h2 class="section-title">${year}: ${formatDate(data.dateRange.start)} - ${formatDate(data.dateRange.end)}</h2>`;
+  html += `<div class="spark-row">
+    <div class="spark-card"><div class="spark-icon" style="background:rgba(49,130,206,0.12);color:#3182ce">&#x1D4E3;</div><div class="spark-data"><div class="spark-val">${t.length.toLocaleString()}</div><div class="spark-label">Total Tasks</div></div></div>
+    <div class="spark-card"><div class="spark-icon" style="background:rgba(56,161,105,0.12);color:#38a169">&#x2714;</div><div class="spark-data"><div class="spark-val">${completionRate}%</div><div class="spark-label">Completion Rate</div></div></div>
+    <div class="spark-card"><div class="spark-icon" style="background:rgba(128,90,213,0.12);color:#805ad5">&#x23F1;</div><div class="spark-data"><div class="spark-val">${medianDur} min</div><div class="spark-label">Median Duration</div></div></div>
+    <div class="spark-card"><div class="spark-icon" style="background:rgba(221,107,32,0.12);color:#dd6b20">&#x1D4E3;</div><div class="spark-data"><div class="spark-val">${uniqueTechs}</div><div class="spark-label">Technicians</div></div></div>
+    <div class="spark-card"><div class="spark-icon" style="background:rgba(49,151,149,0.12);color:#319795">&#x1F4C8;</div><div class="spark-data"><div class="spark-val">${avgPerMonth}</div><div class="spark-label">Avg / Month</div></div></div>
+    <div class="spark-card"><div class="spark-icon" style="background:rgba(229,62,62,0.12);color:#e53e3e">&#x2718;</div><div class="spark-data"><div class="spark-val">${cancelRate}%</div><div class="spark-label">Cancel Rate</div></div></div>
+    ${ec.length?`<div class="spark-card"><div class="spark-icon" style="background:rgba(214,158,46,0.12);color:#b7791f">&#x1F527;</div><div class="spark-data"><div class="spark-val">${ec.length.toLocaleString()}</div><div class="spark-label">Equipment Checks</div></div></div>
+    <div class="spark-card"><div class="spark-icon" style="background:rgba(229,62,62,0.12);color:#e53e3e">&#x26A0;</div><div class="spark-data"><div class="spark-val">${issueRate}%</div><div class="spark-label">Issue Rate</div></div></div>`:''}
+  </div>`;
+  if (t.length > 0) {
+    html += `<div class="chart-grid"><div class="chart-card full-width"><h3>Monthly Task Volume &amp; Completion Rate</h3><canvas id="yrVolume"></canvas></div></div>
+    <h2 class="section-title" style="border-bottom-color:#805ad5">Unit Analysis (${year})</h2>
+    <div class="chart-grid">
+      <div class="chart-card full-width"><h3>Unit Activity Heatmap (Units x Months)</h3><div id="yrHeatmapUnits"></div></div>
+      <div class="chart-card full-width"><h3>Unit Activity by Hour</h3><div id="yrHeatmapHours"></div></div>
+      <div class="chart-card"><h3>Top Units by Volume</h3><div id="yrHBarUnits"></div></div>
+      <div class="chart-card"><h3>Top Interventions</h3><div id="yrHBarInter"></div></div>
+    </div>
+    <h2 class="section-title" style="border-bottom-color:#dd6b20">Staffing &amp; Timing (${year})</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Technician Workload</h3><div id="yrHBarTechs"></div></div>
+      <div class="chart-card"><h3>Equipment Usage</h3><div id="yrHBarEquip"></div></div>
+      <div class="chart-card full-width"><h3>Hourly Activity Distribution</h3><canvas id="yrHourly"></canvas></div>
+      <div class="chart-card"><h3>Average Tasks by Day of Week</h3><canvas id="yrDOW"></canvas></div>
+      <div class="chart-card"><h3>Task Status Breakdown</h3><canvas id="yrStatus"></canvas></div>
+    </div>`;
+  }
+  if (ec.length > 0) {
+    html += `<h2 class="section-title equip-title">Equipment Checks (${year})</h2>
+    <div class="chart-grid">
+      <div class="chart-card full-width"><h3>Monthly Checks vs Issues</h3><canvas id="yrEqMonth"></canvas></div>
+      <div class="chart-card"><h3>Issue Categories</h3><canvas id="yrEqCats"></canvas></div>
+      <div class="chart-card"><h3>Top Checkers</h3><canvas id="yrEqCheckers"></canvas></div>
+      <div class="chart-card"><h3>Units with Most Issues</h3><canvas id="yrEqUnits"></canvas></div>
+    </div>`;
+  }
+  if (t.length > 0) {
+    html += `<h2 class="section-title">Detailed Tables (${year})</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Unit Performance</h3><div id="yrTblUnits"></div></div>
+      <div class="chart-card"><h3>Technician Performance</h3><div id="yrTblTechs"></div></div>
+    </div>`;
+  }
+  container.innerHTML = html;
+  if (t.length > 0) {
+    const cpm = completionByMonth(t);
+    makeChart(document.getElementById('yrVolume'),{type:'bar',data:{labels:cpm.map(m=>m[0]),datasets:[
+      {type:'bar',label:'Tasks',data:cpm.map(m=>m[1].total),backgroundColor:'rgba(49,130,206,0.65)',borderColor:'#3182ce',borderWidth:1,borderRadius:4,order:2},
+      {type:'line',label:'Completion %',data:cpm.map(m=>m[1].total?Math.round(m[1].completed/m[1].total*100):0),borderColor:'#38a169',backgroundColor:'rgba(56,161,105,0.08)',yAxisID:'y1',tension:0.4,fill:true,pointRadius:4,pointBackgroundColor:'#38a169',order:1}
+    ]},options:{responsive:true,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{usePointStyle:true,padding:16}}},scales:{y:{beginAtZero:true,title:{display:true,text:'Tasks'},grid:{color:'rgba(0,0,0,0.04)'}},y1:{position:'right',beginAtZero:true,max:100,title:{display:true,text:'%'},grid:{drawOnChartArea:false}}}}});
+    const hm = buildUnitMonthHeatmap(t); renderHeatmapHTML(hm, 'blue', 'yrHeatmapUnits');
+    const hhm = buildUnitHourHeatmap(t); renderHourHeatmapHTML(hhm, 'yrHeatmapHours');
+    renderHorizontalBars('yrHBarUnits', topN(countBy(t,'unit')), t.length, null);
+    renderHorizontalBars('yrHBarInter', topN(countBy(t,'taskType')), t.length, null);
+    renderHorizontalBars('yrHBarTechs', topN(countBy(t,'tech')), t.length, null);
+    renderHorizontalBars('yrHBarEquip', topN(countBy(t.filter(x=>x.equipment),'equipment')), t.filter(x=>x.equipment).length, null);
+    const hours = hourDistribution(t);
+    makeChart(document.getElementById('yrHourly'),{type:'bar',data:{labels:Array.from({length:24},(_,i)=>i+':00'),datasets:[{label:'Tasks',data:hours,backgroundColor:hours.map((_,i)=>{
+      if(i>=8&&i<=17) return 'rgba(49,130,206,0.75)'; if(i>=18&&i<=21) return 'rgba(128,90,213,0.6)'; return 'rgba(160,174,192,0.35)';
+    }),borderRadius:3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'rgba(0,0,0,0.04)'},title:{display:true,text:'Tasks'}},x:{title:{display:true,text:'Hour of Day'}}}}});
+    renderDOWChart('yrDOW',t); renderStatusChart('yrStatus',t);
+    renderTable(t,'yrTblUnits','unit',['Unit','Tasks','Completion %']);
+    renderTable(t,'yrTblTechs','tech',['Technician','Tasks','% of Total']);
+  }
+  if (ec.length > 0) renderEquipCharts('yr', ec, null);
+}
+
+// =============================================
+// EQUIPMENT CHARTS
+// =============================================
+function renderEquipCharts(prefix, checks, yoyData) {
+  const eqByMonth = equipIssuesByMonth(checks);
+  const el1 = document.getElementById(prefix+'EqMonth');
+  if (el1) makeChart(el1, {type:'bar',data:{labels:eqByMonth.map(m=>m[0]),datasets:[
+    {type:'bar',label:'Total Checks',data:eqByMonth.map(m=>m[1].total),backgroundColor:'rgba(49,130,206,0.5)',order:2},
+    {type:'bar',label:'Issues Found',data:eqByMonth.map(m=>m[1].issues),backgroundColor:'rgba(229,62,62,0.7)',order:1}
+  ]},options:{responsive:true,interaction:{mode:'index'},scales:{y:{beginAtZero:true,title:{display:true,text:'Count'}}}}});
+  const cats = categorizeIssues(checks);
+  const el2 = document.getElementById(prefix+'EqCats');
+  if (el2 && cats.length) makeChart(el2, {type:'doughnut',data:{labels:cats.map(c=>c[0]),datasets:[{data:cats.map(c=>c[1]),backgroundColor:['#e53e3e','#d69e2e','#805ad5','#dd6b20','#319795','#718096']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+  const checkers = topN(countBy(checks,'checkedBy'),10);
+  const el3 = document.getElementById(prefix+'EqCheckers');
+  if (el3 && checkers.length) makeChart(el3, {type:'bar',data:{labels:checkers.map(c=>c[0]),datasets:[{label:'Checks',data:checkers.map(c=>c[1]),backgroundColor:COLORS}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  const issueChecks = checks.filter(c=>c.hasIssue);
+  const issueUnits = topN(countBy(issueChecks,'unit'),10);
+  const el4 = document.getElementById(prefix+'EqUnits');
+  if (el4 && issueUnits.length) makeChart(el4, {type:'bar',data:{labels:issueUnits.map(u=>u[0]),datasets:[{label:'Issues',data:issueUnits.map(u=>u[1]),backgroundColor:'rgba(229,62,62,0.7)'}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  if (yoyData) {
+    const el5 = document.getElementById(prefix+'EqYearTrend');
+    if (el5) makeChart(el5, {type:'line',data:{labels:yoyData.map(d=>String(d.year)),datasets:[{label:'Issue Rate %',data:yoyData.map(d=>d.issueRate),borderColor:'#e53e3e',backgroundColor:'rgba(229,62,62,0.15)',fill:true,tension:0.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'%'}}}}});
+  }
+}
+
+// =============================================
+// REUSABLE CHART BUILDERS
+// =============================================
+function renderBarChart(id, tasks, field, label) {
+  const items = topN(countBy(tasks,field)); const el = document.getElementById(id);
+  if (!el||!items.length) return;
+  makeChart(el,{type:'bar',data:{labels:items.map(i=>i[0].length>25?i[0].substring(0,25)+'...':i[0]),datasets:[{label:label,data:items.map(i=>i[1]),backgroundColor:COLORS}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+}
+function renderHourlyChart(id,tasks) {
+  const hours=hourDistribution(tasks); const el=document.getElementById(id); if(!el)return;
+  makeChart(el,{type:'bar',data:{labels:Array.from({length:24},(_,i)=>i+':00'),datasets:[{label:'Tasks',data:hours,backgroundColor:hours.map((_,i)=>(i>=8&&i<=17)?'rgba(49,130,206,0.7)':'rgba(49,130,206,0.3)')}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Tasks'}},x:{title:{display:true,text:'Hour of Day'}}}}});
+}
+function renderDOWChart(id,tasks) {
+  const dow=dayOfWeekDist(tasks); const el=document.getElementById(id); if(!el)return;
+  makeChart(el,{type:'bar',data:{labels:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],datasets:[{label:'Avg Tasks',data:dow,backgroundColor:dow.map((_,i)=>(i>=1&&i<=5)?'rgba(49,130,206,0.7)':'rgba(214,158,46,0.7)')}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+}
+function renderStatusChart(id,tasks) {
+  const st=countBy(tasks,'status'); const el=document.getElementById(id); if(!el)return;
+  makeChart(el,{type:'doughnut',data:{labels:st.map(s=>s[0]),datasets:[{data:st.map(s=>s[1]),backgroundColor:COLORS}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+}
+function renderTable(tasks,containerId,field,headers) {
+  const items=countBy(tasks,field).slice(0,15); const max=items[0]?items[0][1]:1;
+  let html=`<table><tr>${headers.map(h=>'<th>'+h+'</th>').join('')}<th></th></tr>`;
+  items.forEach(([name,count])=>{
+    let metric;
+    if(field==='unit'){const sub=tasks.filter(t=>t[field]===name);const comp=sub.filter(t=>{const s=t.status.toLowerCase();return s.includes('complete')||s.includes('done');});metric=Math.round(comp.length/sub.length*100)+'%';}
+    else{metric=Math.round(count/tasks.length*100)+'%';}
+    html+=`<tr><td>${escHtml(name)}</td><td>${count}</td><td>${metric}</td><td><div class="bar-fill" style="width:${Math.round(count/max*100)}%"></div></td></tr>`;
+  });
+  html+='</table>'; const el=document.getElementById(containerId); if(el) el.innerHTML=html;
+}
+
+// =============================================
+// COMPARE DASHBOARD
+// =============================================
+function renderCompareDashboard(dataA, dataB) {
+  destroyCharts();
+  const d = document.getElementById('dashboard');
+  const tA=dataA.tasks,tB=dataB.tasks;
+  const rateA=getCompletionRate(tA),rateB=getCompletionRate(tB);
+  const monthsA=groupByMonth(tA),monthsB=groupByMonth(tB);
+  const avgA=monthsA.length?Math.round(tA.length/monthsA.length):tA.length;
+  const avgB=monthsB.length?Math.round(tB.length/monthsB.length):tB.length;
+  const techsA=new Set(tA.map(x=>x.tech).filter(Boolean)).size;
+  const techsB=new Set(tB.map(x=>x.tech).filter(Boolean)).size;
+  function delta(a,b,suffix=''){const diff=b-a;if(diff===0)return'';return`<div class="change ${diff>0?'up':'down'}">${diff>0?'+':''}${diff}${suffix} vs A</div>`;}
+  const chipsA=dataA.fileNames.map(f=>`<span class="source-chip">${escHtml(f)}</span>`).join('');
+  const chipsB=dataB.fileNames.map(f=>`<span class="source-chip">${escHtml(f)}</span>`).join('');
+  d.innerHTML=`
+    <h2 class="section-title">Comparison Overview</h2>
+    <div class="compare-row" style="margin-bottom:16px;">
+      <div><div class="compare-label">Group A (${formatDate(dataA.dateRange.start)} - ${formatDate(dataA.dateRange.end)})</div><div class="source-chips" style="margin-bottom:12px">${chipsA}</div></div>
+      <div><div class="compare-label">Group B (${formatDate(dataB.dateRange.start)} - ${formatDate(dataB.dateRange.end)})</div><div class="source-chips" style="margin-bottom:12px">${chipsB}</div></div>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="value">${tA.length.toLocaleString()} / ${tB.length.toLocaleString()}</div><div class="label">Total Tasks</div>${delta(tA.length,tB.length)}</div>
+      <div class="kpi-card"><div class="value">${rateA}% / ${rateB}%</div><div class="label">Completion Rate</div>${delta(rateA,rateB,'%')}</div>
+      <div class="kpi-card"><div class="value">${avgA} / ${avgB}</div><div class="label">Avg Tasks/Month</div>${delta(avgA,avgB)}</div>
+      <div class="kpi-card"><div class="value">${techsA} / ${techsB}</div><div class="label">Technicians</div>${delta(techsA,techsB)}</div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card full-width"><h3>Monthly Volume Comparison</h3><canvas id="cmpVolume"></canvas></div>
+      <div class="chart-card"><h3>Top Units</h3><canvas id="cmpUnits"></canvas></div>
+      <div class="chart-card"><h3>Top Interventions</h3><canvas id="cmpTasks"></canvas></div>
+      <div class="chart-card"><h3>Hourly Distribution</h3><canvas id="cmpHourly"></canvas></div>
+      <div class="chart-card"><h3>Day of Week</h3><canvas id="cmpDOW"></canvas></div>
+      <div class="chart-card full-width"><h3>Technician Workload (Top 10)</h3><canvas id="cmpTechs"></canvas></div>
+    </div>`;
+  d.classList.remove('hidden');
+  const allMonths=[...new Set([...monthsA.map(m=>m[0]),...monthsB.map(m=>m[0])])].sort();
+  const volA={},volB={};monthsA.forEach(([m,c])=>volA[m]=c);monthsB.forEach(([m,c])=>volB[m]=c);
+  makeChart(document.getElementById('cmpVolume'),{type:'line',data:{labels:allMonths,datasets:[
+    {label:'A',data:allMonths.map(m=>volA[m]||0),borderColor:COLORS[0],backgroundColor:COLORS_LIGHT[0],fill:true,tension:0.3},
+    {label:'B',data:allMonths.map(m=>volB[m]||0),borderColor:COLORS[1],backgroundColor:COLORS_LIGHT[1],fill:true,tension:0.3}
+  ]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+  renderCompareBar('cmpUnits',tA,tB,'unit');
+  renderCompareBar('cmpTasks',tA,tB,'taskType');
+  renderCompareBar('cmpTechs',tA,tB,'tech');
+  const hA=hourDistribution(tA),hB=hourDistribution(tB);
+  makeChart(document.getElementById('cmpHourly'),{type:'line',data:{labels:Array.from({length:24},(_,i)=>i+':00'),datasets:[
+    {label:'A',data:hA,borderColor:COLORS[0],backgroundColor:COLORS_LIGHT[0],fill:true,tension:0.3},
+    {label:'B',data:hB,borderColor:COLORS[1],backgroundColor:COLORS_LIGHT[1],fill:true,tension:0.3}
+  ]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+  const dowA=dayOfWeekDist(tA),dowB=dayOfWeekDist(tB);
+  makeChart(document.getElementById('cmpDOW'),{type:'bar',data:{labels:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],datasets:[
+    {label:'A',data:dowA,backgroundColor:'rgba(49,130,206,0.7)'},
+    {label:'B',data:dowB,backgroundColor:'rgba(56,161,105,0.7)'}
+  ]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+}
+function renderCompareBar(id,tA,tB,field){
+  const mapA=Object.fromEntries(countBy(tA,field)),mapB=Object.fromEntries(countBy(tB,field));
+  const all=[...new Set([...Object.keys(mapA),...Object.keys(mapB)])].sort((a,b)=>((mapA[b]||0)+(mapB[b]||0))-((mapA[a]||0)+(mapB[a]||0))).slice(0,10);
+  const el=document.getElementById(id);if(!el)return;
+  makeChart(el,{type:'bar',data:{labels:all.map(t=>t.length>20?t.substring(0,20)+'...':t),datasets:[
+    {label:'A',data:all.map(k=>mapA[k]||0),backgroundColor:'rgba(49,130,206,0.7)'},
+    {label:'B',data:all.map(k=>mapB[k]||0),backgroundColor:'rgba(56,161,105,0.7)'}
+  ]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
+}
+
+// =============================================
+// SAVE ANALYSIS
+// =============================================
+function showSaveModal() {
+  if (!cachedMerged) { showToast('Run an analysis first'); return; }
+  const title = document.getElementById('saveTitle');
+  if (!title.value) {
+    const dr = cachedMerged.dateRange;
+    title.value = 'Analysis ' + (dr.start ? formatDate(dr.start) + ' - ' + formatDate(dr.end) : new Date().toLocaleDateString());
+  }
+  document.getElementById('saveModal').classList.add('show');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+async function doSaveAnalysis() {
+  if (!cachedMerged || !currentUser) return;
+  const title = document.getElementById('saveTitle').value.trim();
+  const desc = document.getElementById('saveDesc').value.trim();
+  if (!title) { showToast('Please enter a title'); return; }
+
+  // Prepare file data for saving
+  const files = [];
+  fileStore.main.forEach(entry => {
+    if (entry.type === 'task') {
+      files.push({ fileName: entry.fileName, sheetName: entry.sheetName, dataType: 'task', rowCount: entry.tasks.length, data: entry.tasks });
+    } else {
+      files.push({ fileName: entry.fileName, sheetName: entry.sheetName, dataType: 'equipCheck', rowCount: entry.checks.length, data: entry.checks });
+    }
+  });
+
+  const dr = cachedMerged.dateRange;
+  const summary = {
+    totalTasks: cachedMerged.tasks.length,
+    totalChecks: cachedMerged.checks.length,
+    completionRate: getCompletionRate(cachedMerged.tasks) + '%',
+    medianDuration: Math.round(getMedianDuration(cachedMerged.tasks)) + ' min',
+    technicians: new Set(cachedMerged.tasks.map(x=>x.tech).filter(Boolean)).size,
+    issueRate: cachedMerged.checks.length ? Math.round(cachedMerged.checks.filter(c=>c.hasIssue).length/cachedMerged.checks.length*1000)/10 + '%' : 'N/A'
+  };
+
+  try {
+    const res = await fetch('/api/analyses', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        title, description: desc, userId: currentUser.id, userName: currentUser.name,
+        taskCount: cachedMerged.tasks.length, checkCount: cachedMerged.checks.length,
+        dateRangeStart: dr.start ? formatDate(dr.start) : '', dateRangeEnd: dr.end ? formatDate(dr.end) : '',
+        summaryJson: JSON.stringify(summary), files
+      })
+    });
+    const result = await res.json();
+    currentAnalysisId = result.id;
+    currentShareToken = result.shareToken;
+    document.getElementById('toolbarTitle').textContent = title;
+    closeModal('saveModal');
+    showToast('Analysis saved!');
+  } catch(e) { showToast('Save failed'); console.error(e); }
+}
+
+// =============================================
+// SHARE
+// =============================================
+function showShareModal() {
+  const linkEl = document.getElementById('shareLink');
+  if (currentShareToken) {
+    linkEl.value = window.location.origin + '/shared/' + currentShareToken;
+  } else {
+    linkEl.value = '';
+    linkEl.placeholder = 'Save the analysis first to generate a share link';
+  }
+  document.getElementById('shareModal').classList.add('show');
+}
+function copyShareLink() {
+  const link = document.getElementById('shareLink');
+  if (!link.value) { showToast('Save the analysis first'); return; }
+  navigator.clipboard.writeText(link.value).then(() => showToast('Link copied!')).catch(() => { link.select(); document.execCommand('copy'); showToast('Link copied!'); });
+}
+function copyShareLinkFor(token) {
+  const url = window.location.origin + '/shared/' + token;
+  navigator.clipboard.writeText(url).then(() => showToast('Link copied!')).catch(() => showToast('Failed to copy'));
+}
+async function doShare() {
+  if (!currentAnalysisId) { showToast('Save the analysis first'); return; }
+  const email = document.getElementById('shareEmail').value.trim();
+  const message = document.getElementById('shareMessage').value.trim();
+  try {
+    await fetch('/api/share', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ analysisId: currentAnalysisId, sharedBy: currentUser.name, email, message })
+    });
+    closeModal('shareModal');
+    showToast(email ? 'Shared via email!' : 'Share link ready!');
+  } catch(e) { showToast('Share failed'); }
+}
+
+// =============================================
+// EXPORT
+// =============================================
+async function exportPDF() {
+  showToast('Generating PDF...');
+  try {
+    const dashboard = document.getElementById('dashboard');
+    const canvas = await html2canvas(dashboard, { scale: 1.5, useCORS: true, logging: false, backgroundColor: '#f7fafc' });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('l', 'mm', 'a4');
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const usableW = pageW - margin * 2;
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+    const ratio = usableW / imgW;
+    const scaledH = imgH * ratio;
+    let yOffset = 0;
+    const pageContentH = pageH - margin * 2;
+
+    while (yOffset < scaledH) {
+      if (yOffset > 0) pdf.addPage();
+      const srcY = yOffset / ratio;
+      const srcH = Math.min(pageContentH / ratio, imgH - srcY);
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imgW;
+      tempCanvas.height = srcH;
+      const ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(canvas, 0, srcY, imgW, srcH, 0, 0, imgW, srcH);
+      const pageImg = tempCanvas.toDataURL('image/jpeg', 0.85);
+      const drawH = Math.min(pageContentH, scaledH - yOffset);
+      pdf.addImage(pageImg, 'JPEG', margin, margin, usableW, drawH);
+      yOffset += pageContentH;
+    }
+    const title = document.getElementById('toolbarTitle').textContent.replace(/[^a-zA-Z0-9]/g, '_') || 'LiftTracker_Analysis';
+    pdf.save(title + '.pdf');
+    showToast('PDF downloaded!');
+  } catch(e) { showToast('PDF export failed'); console.error(e); }
+}
+
+function exportExcelClient() {
+  if (!cachedMerged) { showToast('No analysis data'); return; }
+  const wb = XLSX.utils.book_new();
+  // Summary
+  const summary = {
+    'Total Tasks': cachedMerged.tasks.length,
+    'Total Equipment Checks': cachedMerged.checks.length,
+    'Completion Rate': getCompletionRate(cachedMerged.tasks) + '%',
+    'Median Duration (min)': Math.round(getMedianDuration(cachedMerged.tasks)),
+    'Active Technicians': new Set(cachedMerged.tasks.map(x=>x.tech).filter(Boolean)).size,
+    'Date Range': (cachedMerged.dateRange.start ? formatDate(cachedMerged.dateRange.start) + ' - ' + formatDate(cachedMerged.dateRange.end) : 'N/A'),
+  };
+  const summaryRows = Object.entries(summary).map(([k,v]) => ({Metric:k, Value:v}));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
+  // Tasks
+  if (cachedMerged.tasks.length) {
+    const taskData = cachedMerged.tasks.map(t => ({
+      Status: t.status, 'Task Type': t.taskType, Unit: t.unit, Technician: t.tech,
+      Equipment: t.equipment, Date: t.date ? t.date.toISOString().split('T')[0] : '', Hour: t.hour,
+      Month: t.month, Year: t.year, 'Duration (min)': t.duration ? Math.round(t.duration) : ''
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskData), 'Tasks');
+  }
+  // Equipment checks
+  if (cachedMerged.checks.length) {
+    const checkData = cachedMerged.checks.map(c => ({
+      Date: c.date ? c.date.toISOString().split('T')[0] : '', 'Checked By': c.checkedBy,
+      Department: c.department, Unit: c.unit, 'Has Issue': c.hasIssue ? 'Yes' : 'No', 'Issue Details': c.issueDetails
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(checkData), 'Equipment Checks');
+  }
+  // Unit summary
+  const unitData = countBy(cachedMerged.tasks, 'unit').map(([name, count]) => {
+    const sub = cachedMerged.tasks.filter(t=>t.unit===name);
+    const comp = sub.filter(t=>{const s=t.status.toLowerCase();return s.includes('complete')||s.includes('done');});
+    return { Unit: name, Tasks: count, 'Completion %': Math.round(comp.length/sub.length*100) + '%' };
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unitData), 'Unit Summary');
+  XLSX.writeFile(wb, (document.getElementById('toolbarTitle').textContent.replace(/[^a-zA-Z0-9]/g,'_') || 'LiftTracker') + '.xlsx');
+  showToast('Excel downloaded!');
+}
+
+function exportExcelServer(id, title) {
+  window.location.href = '/api/export/excel/' + id;
+  showToast('Downloading Excel...');
+}
+
+// =============================================
+// TOAST
+// =============================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// =============================================
+// INIT
+// =============================================
+(async function init() {
+  await loadUsers();
+  // Check for saved session
+  const saved = localStorage.getItem('liftracker_user');
+  if (saved) {
+    try {
+      currentUser = JSON.parse(saved);
+      enterApp();
+    } catch(e) { localStorage.removeItem('liftracker_user'); }
+  }
+  // Handle shared URL on fresh load
+  const path = window.location.pathname;
+  if (path.startsWith('/shared/') && !currentUser) {
+    // Auto-login as guest for shared views
+    currentUser = { id: 'guest', name: 'Guest', email: '' };
+    enterApp();
+    const token = path.split('/shared/')[1];
+    if (token) loadSharedAnalysis(token);
+  }
+})();
+</script>
+</body>
+</html>
