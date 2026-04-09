@@ -635,6 +635,7 @@ function resetApp() {
   document.getElementById('uploadArea').classList.remove('hidden');
   document.getElementById('resetBtn').classList.add('hidden');
   document.getElementById('printBtn').classList.add('hidden');
+  const sb = document.getElementById('saveReportBtn'); if (sb) sb.classList.add('hidden');
   ['fileListMain','fileListA','fileListB'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML=''; });
   updateAnalyzeButtons();
 }
@@ -645,11 +646,13 @@ function runSingleAnalysis() {
   if (!cachedMerged || (cachedMerged.tasks.length===0 && cachedMerged.checks.length===0)) return;
   currentTab = 'overview';
   renderTabbedDashboard(cachedMerged);
+  if (typeof _showSaveBtn === 'function') _showSaveBtn();
 }
 function runCompareAnalysis() {
   const a = mergeEntries(fileStore.A), b = mergeEntries(fileStore.B);
   if (!a||!b) return;
   renderCompareDashboard(a, b);
+  if (typeof _hideSaveBtn === 'function') _hideSaveBtn(); // compare reports not saveable for now
 }
 
 // ---- TABBED DASHBOARD ----
@@ -1296,21 +1299,49 @@ function saveUserInfo() {
   updateUserBadge();
   closeModal('userModal');
   showToast('Welcome, ' + name + '!', 'success');
+  if (_pendingSaveAfterSignIn) {
+    _pendingSaveAfterSignIn = false;
+    setTimeout(() => showSaveModal(), 200);
+  }
 }
 
 // ========================================================================
 // ==================== SAVE / LOAD REPORTS ================================
 // ========================================================================
+// Flag: if user clicks Save before signing in, re-open save modal after sign-in
+let _pendingSaveAfterSignIn = false;
 function showSaveModal() {
-  if (!cachedMerged) { showToast('Run an analysis first', 'error'); return; }
-  if (!currentUser) { showToast('Please sign in first', 'error'); showUserModal(); return; }
-  const titleInput = document.getElementById('reportTitleInput');
-  if (!titleInput.value) {
-    const dr = cachedMerged.dateRange;
-    titleInput.value = 'Report ' + (dr.start ? formatDate(dr.start) + ' - ' + formatDate(dr.end) : new Date().toLocaleDateString());
+  try {
+    if (!cachedMerged) { showToast('Run an analysis first', 'error'); return; }
+    if (!currentUser) {
+      _pendingSaveAfterSignIn = true;
+      showToast('Please sign in first', 'error');
+      showUserModal();
+      return;
+    }
+    const modal = document.getElementById('saveModal');
+    const titleInput = document.getElementById('reportTitleInput');
+    if (!modal || !titleInput) {
+      console.error('saveModal or title input missing from DOM');
+      showToast('Save dialog unavailable — please reload the page', 'error');
+      return;
+    }
+    if (!titleInput.value) {
+      const dr = cachedMerged.dateRange || {};
+      let label = '';
+      try {
+        if (dr.start && typeof dr.start.toLocaleDateString === 'function') {
+          label = formatDate(dr.start) + ' - ' + formatDate(dr.end);
+        }
+      } catch(_) {}
+      titleInput.value = 'Report ' + (label || new Date().toLocaleDateString());
+    }
+    modal.classList.add('show');
+    setTimeout(() => { try { titleInput.focus(); } catch(_) {} }, 100);
+  } catch(err) {
+    console.error('showSaveModal error:', err);
+    showToast('Could not open save dialog: ' + (err.message || err), 'error');
   }
-  document.getElementById('saveModal').classList.add('show');
-  setTimeout(() => titleInput.focus(), 100);
 }
 
 async function saveCurrentReport() {
@@ -1463,22 +1494,9 @@ function showToast(msg, type) {
   setTimeout(() => t.className = 'toast' + (type ? ' ' + type : ''), 3000);
 }
 
-// Show save-report button after analysis runs
-const _origRenderTabbed = renderTabbedDashboard;
-renderTabbedDashboard = function(data) {
-  _origRenderTabbed(data);
-  document.getElementById('saveReportBtn').classList.remove('hidden');
-};
-const _origRenderCompare = renderCompareDashboard;
-renderCompareDashboard = function(a, b) {
-  _origRenderCompare(a, b);
-  document.getElementById('saveReportBtn').classList.add('hidden'); // compare reports not saveable for now
-};
-const _origReset = resetApp;
-resetApp = function() {
-  _origReset();
-  document.getElementById('saveReportBtn').classList.add('hidden');
-};
+// Helpers to toggle Save Report button visibility (called directly from analysis/reset paths)
+function _showSaveBtn() { const b = document.getElementById('saveReportBtn'); if (b) b.classList.remove('hidden'); }
+function _hideSaveBtn() { const b = document.getElementById('saveReportBtn'); if (b) b.classList.add('hidden'); }
 
 // Close modals on backdrop click
 document.addEventListener('click', (e) => {
