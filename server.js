@@ -122,14 +122,35 @@ app.get('/api/analyses/:id', wrap(async (req, res) => {
 
 app.post('/api/analyses', wrap(async (req, res) => {
   const { title, description, userId, userName, taskCount, checkCount, dateRangeStart, dateRangeEnd, summaryJson, files } = req.body;
-  if (!title || !userId) return res.status(400).json({ error: 'Title and userId required' });
+  if (!title || !userName) return res.status(400).json({ error: 'Title and userName required' });
+
+  // Resolve (or auto-heal) the user. Browsers may cache a userId from an older
+  // database; if it's not in this DB, fall back to name, then auto-create.
+  let resolvedUserId = null;
+  if (userId) {
+    const byId = await db.get('SELECT id FROM users WHERE id = ?', userId);
+    if (byId) resolvedUserId = byId.id;
+  }
+  if (!resolvedUserId) {
+    const byName = await db.get('SELECT id FROM users WHERE name = ?', userName);
+    if (byName) {
+      resolvedUserId = byName.id;
+    } else {
+      resolvedUserId = uuidv4();
+      await db.run(
+        'INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)',
+        resolvedUserId, userName, '', 'member'
+      );
+    }
+  }
+
   const id = uuidv4();
   const shareToken = uuidv4().split('-')[0];
   await db.run(
     `INSERT INTO analyses (id, title, description, user_id, user_name, share_token,
       task_count, check_count, date_range_start, date_range_end, summary_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    id, title, description || '', userId, userName, shareToken,
+    id, title, description || '', resolvedUserId, userName, shareToken,
     taskCount || 0, checkCount || 0, dateRangeStart || '', dateRangeEnd || '', summaryJson || '{}'
   );
 
@@ -141,7 +162,7 @@ app.post('/api/analyses', wrap(async (req, res) => {
       );
     }
   }
-  res.json({ id, shareToken });
+  res.json({ id, shareToken, userId: resolvedUserId });
 }));
 
 app.delete('/api/analyses/:id', wrap(async (req, res) => {

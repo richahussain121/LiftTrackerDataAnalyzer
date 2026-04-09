@@ -1388,6 +1388,12 @@ async function doSaveAnalysis() {
     const result = await res.json();
     currentAnalysisId = result.id;
     currentShareToken = result.shareToken;
+    // Server may have re-resolved our user id (e.g. after a DB migration).
+    // Refresh the cached id so subsequent saves use the current one.
+    if (result.userId && currentUser && result.userId !== currentUser.id) {
+      currentUser.id = result.userId;
+      try { localStorage.setItem('liftracker_user', JSON.stringify(currentUser)); } catch (e) {}
+    }
     const tt = document.getElementById('toolbarTitle'); if (tt) tt.textContent = title;
     closeModal('saveModal');
     showToast('Analysis saved to shared storage');
