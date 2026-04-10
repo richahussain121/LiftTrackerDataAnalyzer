@@ -3,8 +3,30 @@ const multer = require('multer');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const XLSX = require('xlsx');
+const zlib = require('zlib');
 
 const db = require('./db'); // async adapter: libSQL (Turso) or local SQLite
+
+// --- Compression helpers for large raw_json blobs ---
+// Turso's HTTP API has a ~4 MB request-body limit. A 228K-row analysis can
+// easily produce 20-50 MB of JSON. We gzip + base64-encode before INSERT and
+// reverse on SELECT. The stored string starts with "gz:" so we can tell
+// compressed values from legacy uncompressed ones.
+
+function compressJson(obj) {
+  const json = typeof obj === 'string' ? obj : JSON.stringify(obj);
+  const compressed = zlib.gzipSync(Buffer.from(json, 'utf8'));
+  return 'gz:' + compressed.toString('base64');
+}
+
+function decompressJson(stored) {
+  if (!stored) return '{}';
+  if (typeof stored === 'string' && stored.startsWith('gz:')) {
+    const buf = Buffer.from(stored.slice(3), 'base64');
+    return zlib.gunzipSync(buf).toString('utf8');
+  }
+  return stored; // legacy uncompressed value — return as-is
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -117,6 +139,8 @@ app.get('/api/analyses/:id', wrap(async (req, res) => {
   const analysis = await db.get('SELECT * FROM analyses WHERE id = ? OR share_token = ?', req.params.id, req.params.id);
   if (!analysis) return res.status(404).json({ error: 'Analysis not found' });
   const files = await db.all('SELECT id, file_name, sheet_name, data_type, row_count, raw_json FROM analysis_files WHERE analysis_id = ?', analysis.id);
+  // Decompress raw_json for each file (handles both compressed and legacy values)
+  for (const f of files) { f.raw_json = decompressJson(f.raw_json); }
   res.json({ ...analysis, files });
 }));
 
@@ -156,9 +180,14 @@ app.post('/api/analyses', wrap(async (req, res) => {
 
   if (files && files.length > 0) {
     for (const f of files) {
+      const rawJson = compressJson(f.data);
+      console.log('[save] file %s: %d rows, compressed %s → %s KB',
+        f.fileName, f.rowCount,
+        (JSON.stringify(f.data).length / 1024).toFixed(0),
+        (rawJson.length / 1024).toFixed(0));
       await db.run(
         'INSERT INTO analysis_files (id, analysis_id, file_name, sheet_name, data_type, row_count, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        uuidv4(), id, f.fileName, f.sheetName, f.dataType, f.rowCount, JSON.stringify(f.data)
+        uuidv4(), id, f.fileName, f.sheetName, f.dataType, f.rowCount, rawJson
       );
     }
   }
@@ -241,7 +270,7 @@ app.get('/api/export/excel/:id', wrap(async (req, res) => {
   // Data sheets
   files.forEach((f) => {
     try {
-      const data = JSON.parse(f.raw_json);
+      const data = JSON.parse(decompressJson(f.raw_json));
       if (data.length) {
         const name = (f.sheet_name || f.file_name).substring(0, 31);
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), name);
@@ -269,6 +298,16 @@ app.get('*', (_req, res) => {
 app.use((err, _req, res, _next) => {
   console.error('API error:', err);
   res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
+// --- Process-level crash protection ---
+// A single OOM or unhandled rejection should log loudly, not silently kill
+// the service on Render (which shows a cryptic 502 to the user).
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION (process kept alive):', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION (process kept alive):', reason);
 });
 
 // --- Start ---
