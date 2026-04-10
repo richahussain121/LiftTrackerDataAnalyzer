@@ -11,22 +11,30 @@
 const path = require('path');
 const fs = require('fs');
 
-const USE_LIBSQL = !!(process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN);
+const rawUrl = (process.env.TURSO_DATABASE_URL || '').trim();
+const rawToken = (process.env.TURSO_AUTH_TOKEN || '').trim();
+
+// Reject obvious placeholder/garbage values so a mistyped env var on the host
+// falls back cleanly instead of crashing the whole process on boot.
+function looksLikeValidLibsqlUrl(u) {
+  if (!u) return false;
+  if (u.includes(' ')) return false;               // no whitespace
+  if (/^the\b/i.test(u)) return false;             // placeholder "the libsql:// URL"
+  return /^(libsql|https|http|wss|ws|file):\/\//i.test(u);
+}
+
+const USE_LIBSQL = looksLikeValidLibsqlUrl(rawUrl) && rawToken.length > 0;
 
 let underlying;
 let modeLabel;
 
-if (USE_LIBSQL) {
-  // libSQL cloud (Turso) — persistent, survives host restarts
+function initLibsql() {
   const { createClient } = require('@libsql/client');
-  underlying = createClient({
-    url: process.env.TURSO_DATABASE_URL,
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  });
+  underlying = createClient({ url: rawUrl, authToken: rawToken });
   modeLabel = 'libsql (Turso)';
-} else {
-  // Local SQLite file — used for dev on your Mac, or any host with a
-  // persistent disk mounted at ./data
+}
+
+function initLocal() {
   const Database = require('better-sqlite3');
   const dataDir = path.join(__dirname, 'data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -34,6 +42,22 @@ if (USE_LIBSQL) {
   underlying.pragma('journal_mode = WAL');
   underlying.pragma('foreign_keys = ON');
   modeLabel = 'sqlite (local file)';
+}
+
+if (USE_LIBSQL) {
+  try {
+    initLibsql();
+  } catch (err) {
+    console.error('[db] Failed to initialize Turso client, falling back to local SQLite.');
+    console.error('[db] Reason:', err && err.message ? err.message : err);
+    initLocal();
+  }
+} else {
+  if (rawUrl || rawToken) {
+    console.warn('[db] TURSO_DATABASE_URL or TURSO_AUTH_TOKEN looks invalid — using local SQLite.');
+    console.warn('[db] URL seen: %j  (must start with libsql://)', rawUrl);
+  }
+  initLocal();
 }
 
 // ---- Uniform async API ----
