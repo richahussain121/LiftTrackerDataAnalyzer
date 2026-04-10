@@ -272,7 +272,10 @@ app.use((err, _req, res, _next) => {
 });
 
 // --- Start ---
-initDatabase()
+// verifyConnection() sends a quick test query to Turso with a 10s timeout.
+// If it fails, db.js silently switches to local SQLite so the server still boots.
+db.verifyConnection()
+  .then(() => initDatabase())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`\n  LiftTracker Task Analyzer`);

@@ -23,15 +23,17 @@ function looksLikeValidLibsqlUrl(u) {
   return /^(libsql|https|http|wss|ws|file):\/\//i.test(u);
 }
 
-const USE_LIBSQL = looksLikeValidLibsqlUrl(rawUrl) && rawToken.length > 0;
+const WANT_LIBSQL = looksLikeValidLibsqlUrl(rawUrl) && rawToken.length > 0;
 
 let underlying;
 let modeLabel;
+let usingLibsql = false;
 
 function initLibsql() {
   const { createClient } = require('@libsql/client');
   underlying = createClient({ url: rawUrl, authToken: rawToken });
   modeLabel = 'libsql (Turso)';
+  usingLibsql = true;
 }
 
 function initLocal() {
@@ -42,9 +44,10 @@ function initLocal() {
   underlying.pragma('journal_mode = WAL');
   underlying.pragma('foreign_keys = ON');
   modeLabel = 'sqlite (local file)';
+  usingLibsql = false;
 }
 
-if (USE_LIBSQL) {
+if (WANT_LIBSQL) {
   try {
     initLibsql();
   } catch (err) {
@@ -60,11 +63,50 @@ if (USE_LIBSQL) {
   initLocal();
 }
 
+// ---- Connection verification (Turso only) ----
+// createClient() never actually talks to the server — it only creates an
+// in-memory config object. The first real query triggers the network
+// connection. If the URL or token is wrong the query will hang forever
+// (no built-in timeout), which blocks initDatabase() and prevents the
+// Express server from ever starting to listen.
+//
+// verifyConnection() runs a trivial query with a race-against-timeout.
+// If it fails or times out, we tear down the Turso client and switch to
+// local SQLite so the service at least starts (data won't persist across
+// deploys but the app is usable).
+
+const CONNECT_TIMEOUT_MS = 10000; // 10 seconds
+
+async function verifyConnection() {
+  if (!usingLibsql) return; // nothing to verify for local SQLite
+
+  console.log('[db] Verifying Turso connection (timeout: %ds)...', CONNECT_TIMEOUT_MS / 1000);
+  console.log('[db] URL: %s', rawUrl.replace(/\/\/(.{6}).*(@.*)/, '//$1***$2')); // mask middle
+
+  try {
+    const result = await Promise.race([
+      underlying.execute('SELECT 1'),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Turso connection timed out after ' + CONNECT_TIMEOUT_MS + 'ms')), CONNECT_TIMEOUT_MS)
+      ),
+    ]);
+    if (result) {
+      console.log('[db] Turso connection verified — OK');
+    }
+  } catch (err) {
+    console.error('[db] Turso connection FAILED: %s', err && err.message ? err.message : err);
+    console.error('[db] Falling back to local SQLite so the server can still start.');
+    console.error('[db] Check TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in your Render env vars.');
+    try { underlying.close && underlying.close(); } catch (_) {}
+    initLocal();
+  }
+}
+
 // ---- Uniform async API ----
 
 // Execute a multi-statement DDL script (CREATE TABLE ..., etc)
 async function exec(sql) {
-  if (USE_LIBSQL) {
+  if (usingLibsql) {
     // libSQL's execute() runs one statement per call, so split on ';'
     const statements = sql
       .split(';')
@@ -80,7 +122,7 @@ async function exec(sql) {
 
 // INSERT / UPDATE / DELETE — returns { changes, lastInsertRowid }
 async function run(sql, ...params) {
-  if (USE_LIBSQL) {
+  if (usingLibsql) {
     const res = await underlying.execute({ sql, args: params });
     return { changes: Number(res.rowsAffected || 0), lastInsertRowid: res.lastInsertRowid };
   }
@@ -89,7 +131,7 @@ async function run(sql, ...params) {
 
 // SELECT returning a single row (or undefined)
 async function get(sql, ...params) {
-  if (USE_LIBSQL) {
+  if (usingLibsql) {
     const res = await underlying.execute({ sql, args: params });
     return res.rows[0] ? normalizeRow(res.rows[0], res.columns) : undefined;
   }
@@ -98,7 +140,7 @@ async function get(sql, ...params) {
 
 // SELECT returning all rows
 async function all(sql, ...params) {
-  if (USE_LIBSQL) {
+  if (usingLibsql) {
     const res = await underlying.execute({ sql, args: params });
     return res.rows.map((r) => normalizeRow(r, res.columns));
   }
@@ -119,4 +161,4 @@ function normalizeRow(row, columns) {
   return out;
 }
 
-module.exports = { exec, run, get, all, mode: modeLabel };
+module.exports = { exec, run, get, all, verifyConnection, get mode() { return modeLabel; } };
